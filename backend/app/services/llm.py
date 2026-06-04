@@ -98,7 +98,7 @@ class OllamaClient:
             "stream": True,
             "options": {
                 "temperature": temperature,
-                "num_predict": 4096,
+                "num_predict": 2048,
             },
         }
         if system:

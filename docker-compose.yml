@@ -51,7 +51,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://agent:agent@postgres:5432/research_agent
       - LOG_LEVEL=INFO
-      - CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+      - CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000","http://localhost:3001","http://127.0.0.1:3001"]
     depends_on:
       postgres:
         condition: service_healthy

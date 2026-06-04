@@ -2,6 +2,9 @@
 Reflector Node — Gap Analysis, Confidence Scoring, Loop Decision.
 Evaluates the draft answer for completeness, identifies gaps,
 and decides whether to loop back to the planner or finalize.
+
+Generates follow-up suggestions in the SAME LLM call to avoid
+an extra round-trip to Ollama.
 """
 
 import logging
@@ -10,7 +13,8 @@ from app.agents.state import ResearchState
 
 logger = logging.getLogger(__name__)
 
-REFLECTOR_SYSTEM = """You are a research quality evaluator. Your job is to assess whether a research answer fully addresses the original question.
+# Combined system prompt: reflection + follow-up generation in one call
+REFLECTOR_SYSTEM = """You are a research quality evaluator. Your job is to assess whether a research answer fully addresses the original question AND suggest follow-up questions.
 
 Evaluate based on:
 1. Coverage: Does the answer address ALL aspects of the question?
@@ -18,13 +22,20 @@ Evaluate based on:
 3. Accuracy: Are there any contradictions or unsupported claims?
 4. Depth: Is the answer sufficiently detailed for the complexity of the question?
 
+Also generate 3 natural follow-up questions that a curious reader might ask after reading the answer. The follow-ups should:
+- Explore related but different angles
+- Go deeper into specific mentioned topics
+- Be specific and searchable
+- NOT repeat what was already answered
+
 Respond ONLY with valid JSON in this exact format:
 {
     "confidence": 0.85,
     "gaps": ["gap description 1", "gap description 2"],
     "should_continue": false,
     "refined_queries": ["refined query 1"],
-    "reasoning": "Brief explanation of your assessment"
+    "reasoning": "Brief explanation of your assessment",
+    "follow_up_suggestions": ["follow-up question 1", "follow-up question 2", "follow-up question 3"]
 }
 
 Rules for confidence scoring:
@@ -35,7 +46,7 @@ Rules for confidence scoring:
 
 Set should_continue=true ONLY if confidence < 0.7 AND there are specific, actionable gaps."""
 
-REFLECTOR_PROMPT = """Evaluate this research answer for completeness and quality:
+REFLECTOR_PROMPT = """Evaluate this research answer for completeness and quality, then suggest follow-up questions:
 
 **Original Question:** {query}
 
@@ -47,27 +58,13 @@ REFLECTOR_PROMPT = """Evaluate this research answer for completeness and quality
 
 **Number of sources used:** {num_sources}
 
-Evaluate the answer and respond with JSON only:"""
-
-FOLLOWUP_SYSTEM = """You are a research assistant. Generate 3-4 natural follow-up questions that a curious reader might ask after reading the answer to the original question. The follow-ups should:
-1. Explore related but different angles
-2. Go deeper into specific mentioned topics
-3. Be specific and searchable
-4. NOT repeat what was already answered
-
-Respond ONLY with valid JSON:
-{"suggestions": ["question 1", "question 2", "question 3"]}"""
-
-FOLLOWUP_PROMPT = """Original question: {query}
-
-Answer summary: {answer_summary}
-
-Generate 3-4 natural follow-up questions. Respond with JSON only:"""
+Evaluate the answer AND generate 3 follow-up questions. Respond with JSON only:"""
 
 
 async def reflector_node(state: ResearchState) -> dict:
     """
-    Reflector node: evaluates answer quality, decides to loop or finalize.
+    Reflector node: evaluates answer quality, decides to loop or finalize,
+    and generates follow-up suggestions — all in a single LLM call.
 
     Args:
         state: Current research state with draft_answer.
@@ -95,7 +92,7 @@ async def reflector_node(state: ResearchState) -> dict:
     try:
         llm = get_llm_client()
 
-        # --- Evaluate the answer ---
+        # --- Single combined LLM call for reflection + follow-ups ---
         prompt = REFLECTOR_PROMPT.format(
             query=query,
             sub_queries="\n".join(f"- {q}" for q in sub_queries),
@@ -115,6 +112,13 @@ async def reflector_node(state: ResearchState) -> dict:
         refined_queries = result.get("refined_queries", [])
         reasoning = result.get("reasoning", "")
 
+        # Extract follow-up suggestions from the same response
+        follow_ups = result.get("follow_up_suggestions", [])
+        if isinstance(follow_ups, list):
+            follow_ups = [s.strip() for s in follow_ups if isinstance(s, str) and s.strip()][:4]
+        else:
+            follow_ups = []
+
         # Force stop if we've reached max iterations
         if iteration >= max_iterations:
             should_continue = False
@@ -133,16 +137,13 @@ async def reflector_node(state: ResearchState) -> dict:
         }
 
         logger.info(
-            "Reflector: confidence=%.2f, gaps=%d, continue=%s",
-            confidence, len(gaps), should_continue,
+            "Reflector: confidence=%.2f, gaps=%d, continue=%s, follow_ups=%d",
+            confidence, len(gaps), should_continue, len(follow_ups),
         )
 
-        # --- Generate follow-up suggestions ---
-        follow_ups = []
-        if not should_continue:
-            follow_ups = await _generate_follow_ups(llm, query, draft_answer)
-            if sse_callback and follow_ups:
-                await sse_callback("follow_up", {"suggestions": follow_ups})
+        # Send follow-up suggestions to frontend
+        if sse_callback and follow_ups and not should_continue:
+            await sse_callback("follow_up", {"suggestions": follow_ups})
 
         return {
             "reflection": reflection,
@@ -168,30 +169,3 @@ async def reflector_node(state: ResearchState) -> dict:
             "phase": "reflecting",
             "error": f"Reflector error: {str(e)}",
         }
-
-
-async def _generate_follow_ups(llm, query: str, answer: str) -> list[str]:
-    """Generate follow-up question suggestions."""
-    try:
-        # Use first 500 chars as summary
-        answer_summary = answer[:500] + "..." if len(answer) > 500 else answer
-
-        prompt = FOLLOWUP_PROMPT.format(
-            query=query,
-            answer_summary=answer_summary,
-        )
-
-        result = await llm.generate_structured(
-            prompt=prompt,
-            system=FOLLOWUP_SYSTEM,
-            temperature=0.5,
-        )
-
-        suggestions = result.get("suggestions", [])
-        if isinstance(suggestions, list):
-            return [s.strip() for s in suggestions if s.strip()][:4]
-        return []
-
-    except Exception as e:
-        logger.warning("Follow-up generation failed: %s", e)
-        return []

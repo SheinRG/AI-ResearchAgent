@@ -3,6 +3,7 @@ Researcher Node — Search → Scrape → Chunk → Rerank pipeline.
 One researcher node runs per sub-query, executing in parallel via LangGraph Send API.
 """
 
+import asyncio
 import logging
 from app.services.search import search_web
 from app.services.scraper import scrape_urls
@@ -13,6 +14,23 @@ from app.agents.state import ResearchState
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+async def _search_single_query(sub_query: str, max_results: int) -> tuple[str, list[dict]]:
+    """Search a single sub-query, using cache when available.
+
+    Returns:
+        Tuple of (sub_query, results_list).
+    """
+    cached = await cache_get("search", sub_query)
+    if cached:
+        logger.info("Cache hit for search: %s", sub_query[:50])
+        return sub_query, cached
+
+    results_objs = await search_web(sub_query, max_results=max_results)
+    results = [r.model_dump() for r in results_objs]
+    await cache_set("search", sub_query, results)
+    return sub_query, results
 
 
 async def researcher_node(state: ResearchState) -> dict:
@@ -43,22 +61,22 @@ async def researcher_node(state: ResearchState) -> dict:
             "message": f"Searching {len(sub_queries)} sub-questions across the web..."
         })
 
-    # --- Step 1: Search all sub-queries ---
+    # --- Step 1: Search all sub-queries IN PARALLEL ---
+    search_tasks = [
+        _search_single_query(sq, settings.search_results_per_query)
+        for sq in sub_queries
+    ]
+    search_results_per_query = await asyncio.gather(*search_tasks, return_exceptions=True)
+
     all_search_results = []
     all_urls_to_scrape = []
     url_to_result = {}
 
-    for sub_query in sub_queries:
-        # Check cache first
-        cached = await cache_get("search", sub_query)
-        if cached:
-            logger.info("Cache hit for search: %s", sub_query[:50])
-            results = cached
-        else:
-            results_objs = await search_web(sub_query, max_results=settings.search_results_per_query)
-            results = [r.model_dump() for r in results_objs]
-            await cache_set("search", sub_query, results)
-
+    for result in search_results_per_query:
+        if isinstance(result, Exception):
+            logger.warning("Search task failed: %s", result)
+            continue
+        _sub_query, results = result
         for r in results:
             if r["url"] not in url_to_result:
                 url_to_result[r["url"]] = r

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://agent:agent@postgres:5432/research_agent"
 
     # --- Agent Settings ---
-    max_iterations: int = 2
+    max_iterations: int = 1
     max_sub_queries: int = 4
     search_results_per_query: int = 5
     scrape_top_n: int = 3
