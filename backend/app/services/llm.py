@@ -1,5 +1,5 @@
 """
-Async Ollama client for local LLM inference.
+Async Groq client for cloud LLM inference.
 Supports regular generation, streaming, and structured JSON output.
 """
 
@@ -8,20 +8,24 @@ import logging
 from typing import AsyncGenerator, Optional
 
 import httpx
+from groq import AsyncGroq
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-class OllamaClient:
-    """Async wrapper around the Ollama HTTP API."""
+class GroqClient:
+    """Async wrapper around the Groq Python SDK."""
 
     def __init__(self):
         settings = get_settings()
-        self.base_url = settings.ollama_host
-        self.model = settings.ollama_model
-        self.timeout = settings.ollama_timeout
+        self.model = settings.groq_model
+        self.timeout = settings.groq_timeout
+        self.client = AsyncGroq(
+            api_key=settings.groq_api_key,
+            timeout=httpx.Timeout(self.timeout),
+        )
 
     async def generate(
         self,
@@ -31,7 +35,7 @@ class OllamaClient:
         format_json: bool = False,
     ) -> str:
         """
-        Generate a complete response from Ollama.
+        Generate a complete response from Groq.
 
         Args:
             prompt: The user prompt.
@@ -42,37 +46,29 @@ class OllamaClient:
         Returns:
             The full generated text.
         """
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-                "num_predict": 2048,
-            },
-        }
+        messages = []
         if system:
-            payload["system"] = system
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 2048,
+            "stream": False,
+        }
         if format_json:
-            payload["format"] = "json"
+            kwargs["response_format"] = {"type": "json_object"}
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/api/generate",
-                    json=payload,
-                )
-                response.raise_for_status()
-                data = response.json()
-                return data.get("response", "")
+            response = await self.client.chat.completions.create(**kwargs)
+            return response.choices[0].message.content or ""
         except httpx.TimeoutException:
-            logger.error("Ollama request timed out after %ds", self.timeout)
-            raise
-        except httpx.HTTPStatusError as e:
-            logger.error("Ollama HTTP error: %s", e.response.status_code)
+            logger.error("Groq request timed out after %ds", self.timeout)
             raise
         except Exception as e:
-            logger.error("Ollama request failed: %s", e)
+            logger.error("Groq request failed: %s", e)
             raise
 
     async def generate_stream(
@@ -82,7 +78,7 @@ class OllamaClient:
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         """
-        Stream tokens from Ollama one at a time.
+        Stream tokens from Groq one at a time.
 
         Args:
             prompt: The user prompt.
@@ -92,42 +88,28 @@ class OllamaClient:
         Yields:
             Individual tokens as they're generated.
         """
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": True,
-            "options": {
-                "temperature": temperature,
-                "num_predict": 2048,
-            },
-        }
+        messages = []
         if system:
-            payload["system"] = system
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/api/generate",
-                    json=payload,
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if line.strip():
-                            try:
-                                data = json.loads(line)
-                                token = data.get("response", "")
-                                if token:
-                                    yield token
-                                if data.get("done", False):
-                                    break
-                            except json.JSONDecodeError:
-                                continue
+            stream = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=2048,
+                stream=True,
+            )
+            async for chunk in stream:
+                token = chunk.choices[0].delta.content
+                if token:
+                    yield token
         except httpx.TimeoutException:
-            logger.error("Ollama stream timed out after %ds", self.timeout)
+            logger.error("Groq stream timed out after %ds", self.timeout)
             raise
         except Exception as e:
-            logger.error("Ollama stream failed: %s", e)
+            logger.error("Groq stream failed: %s", e)
             raise
 
     async def generate_structured(
@@ -137,7 +119,7 @@ class OllamaClient:
         temperature: float = 0.3,
     ) -> dict:
         """
-        Generate structured JSON output from Ollama.
+        Generate structured JSON output from Groq.
 
         Args:
             prompt: The user prompt (should request JSON output).
@@ -157,7 +139,7 @@ class OllamaClient:
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
-            logger.warning("Failed to parse JSON from Ollama, attempting extraction")
+            logger.warning("Failed to parse JSON from Groq, attempting extraction")
             # Try to extract JSON from the response
             start = raw.find("{")
             end = raw.rfind("}") + 1
@@ -170,35 +152,30 @@ class OllamaClient:
             return {}
 
     async def health_check(self) -> bool:
-        """Check if Ollama is running and the model is available."""
+        """Check if Groq API is reachable and responding."""
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                response = await client.get(f"{self.base_url}/api/tags")
-                response.raise_for_status()
-                data = response.json()
-                models = [m["name"] for m in data.get("models", [])]
-                # Check if our model (or its base name) is available
-                model_base = self.model.split(":")[0]
-                available = any(model_base in m for m in models)
-                if not available:
-                    logger.warning(
-                        "Model '%s' not found. Available: %s",
-                        self.model,
-                        models,
-                    )
-                return available
+            models = await self.client.models.list()
+            available = any(m.id == self.model for m in models.data)
+            if not available:
+                model_ids = [m.id for m in models.data]
+                logger.warning(
+                    "Model '%s' not found. Available: %s",
+                    self.model,
+                    model_ids,
+                )
+            return True
         except Exception as e:
-            logger.error("Ollama health check failed: %s", e)
+            logger.error("Groq health check failed: %s", e)
             return False
 
 
 # Singleton instance
-_client: Optional[OllamaClient] = None
+_client: Optional[GroqClient] = None
 
 
-def get_llm_client() -> OllamaClient:
-    """Get the singleton Ollama client."""
+def get_llm_client() -> GroqClient:
+    """Get the singleton Groq client."""
     global _client
     if _client is None:
-        _client = OllamaClient()
+        _client = GroqClient()
     return _client

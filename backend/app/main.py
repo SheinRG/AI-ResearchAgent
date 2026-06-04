@@ -1,5 +1,5 @@
 """
-FastAPI application — CORS, SSE endpoints, session management.
+FastAPI application — Auth, CORS, SSE endpoints, session management.
 Main entry point for the AI Research Agent backend.
 """
 
@@ -7,9 +7,9 @@ import json
 import uuid
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,10 @@ from app.models.schemas import (
     SessionListItem,
     SearchResult,
     DoneEvent,
+    RegisterRequest,
+    LoginRequest,
+    GoogleAuthRequest,
+    AuthResponse,
 )
 from app.models.database import (
     init_db,
@@ -29,10 +33,19 @@ from app.models.database import (
     get_db,
     ResearchSession,
     ResearchQuery,
+    User,
+    get_session_factory,
 )
 from app.agents.graph import get_research_graph
 from app.services.llm import get_llm_client
-from app.services.cache import close_redis
+from app.services.cache import close_redis, get_redis
+from app.services.auth import (
+    hash_password,
+    verify_password,
+    create_token,
+    validate_token,
+    verify_google_token,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -55,16 +68,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Database init failed (will retry on first request): %s", e)
 
-    # Check Ollama health
+    # Check LLM health
     try:
         llm = get_llm_client()
         healthy = await llm.health_check()
         if healthy:
-            logger.info("Ollama is healthy (model: %s)", llm.model)
+            logger.info("LLM client is healthy (model: %s)", llm.model)
         else:
-            logger.warning("Ollama model not found — ensure it's pulled")
+            logger.warning("LLM health check failed — check API key")
     except Exception as e:
-        logger.warning("Ollama health check failed: %s", e)
+        logger.warning("LLM health check failed: %s", e)
 
     yield
 
@@ -77,8 +90,8 @@ async def lifespan(app: FastAPI):
 # --- FastAPI App ---
 app = FastAPI(
     title="AI Research Agent",
-    description="Autonomous research agent with cited answers — 100% local, zero API keys",
-    version="1.0.0",
+    description="Autonomous research agent with cited answers — powered by Groq + Serper",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -93,24 +106,234 @@ app.add_middleware(
 )
 
 
+# --- Auth Dependency ---
+
+async def get_current_user(request: Request) -> dict:
+    """
+    Extract and validate JWT from the Authorization header.
+
+    Returns:
+        User payload dict with sub, email, name.
+
+    Raises:
+        HTTPException 401 if token is missing or invalid.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+
+    token = auth_header[7:]  # Strip "Bearer "
+    payload = validate_token(token)
+
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return payload
+
+
+async def get_optional_user(request: Request) -> Optional[dict]:
+    """
+    Extract JWT if present, but don't require it.
+    Returns user payload or None.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header[7:]
+    return validate_token(token)
+
+
+# --- Rate Limiting ---
+
+async def check_rate_limit(user_id: str) -> None:
+    """
+    Check if a user has exceeded the hourly rate limit.
+
+    Uses Redis to track request count per user per hour.
+
+    Raises:
+        HTTPException 429 if rate limit exceeded.
+    """
+    redis = await get_redis()
+    if redis is None:
+        return  # Skip rate limiting if Redis is unavailable
+
+    settings = get_settings()
+    key = f"ratelimit:{user_id}"
+
+    try:
+        count = await redis.get(key)
+        if count and int(count) >= settings.rate_limit_per_hour:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Maximum {settings.rate_limit_per_hour} queries per hour.",
+            )
+
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 3600)  # Reset after 1 hour
+        await pipe.execute()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("Rate limit check failed: %s", e)
+
+
 # --- Health Check ---
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
     llm = get_llm_client()
-    ollama_ok = await llm.health_check()
+    llm_ok = await llm.health_check()
     return {
         "status": "healthy",
-        "ollama": "connected" if ollama_ok else "disconnected",
+        "llm": "connected" if llm_ok else "disconnected",
         "model": llm.model,
+    }
+
+
+# --- Auth Endpoints ---
+
+@app.post("/api/auth/register")
+async def register(request: RegisterRequest):
+    """
+    Register a new user with email and password.
+
+    Returns JWT token and user info on success.
+    """
+    factory = get_session_factory()
+    async with factory() as db:
+        # Check if email is already registered
+        result = await db.execute(
+            select(User).where(User.email == request.email)
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already registered")
+
+        # Create user
+        user = User(
+            id=str(uuid.uuid4()),
+            email=request.email,
+            name=request.name or request.email.split("@")[0],
+            password_hash=hash_password(request.password),
+        )
+        db.add(user)
+        await db.commit()
+
+        token = create_token(user.id, user.email, user.name)
+
+        logger.info("New user registered: %s", user.email)
+        return AuthResponse(
+            token=token,
+            user={"id": user.id, "email": user.email, "name": user.name},
+        )
+
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest):
+    """
+    Log in with email and password.
+
+    Returns JWT token and user info on success.
+    """
+    factory = get_session_factory()
+    async with factory() as db:
+        result = await db.execute(
+            select(User).where(User.email == request.email)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user or not user.password_hash:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        if not verify_password(request.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        token = create_token(user.id, user.email, user.name)
+
+        logger.info("User logged in: %s", user.email)
+        return AuthResponse(
+            token=token,
+            user={"id": user.id, "email": user.email, "name": user.name},
+        )
+
+
+@app.post("/api/auth/google")
+async def google_auth(request: GoogleAuthRequest):
+    """
+    Authenticate with Google OAuth.
+
+    Verifies the Google ID token, creates or finds the user,
+    and returns a JWT token.
+    """
+    # Verify Google token
+    google_info = await verify_google_token(request.credential)
+    if not google_info:
+        raise HTTPException(status_code=401, detail="Invalid Google credential")
+
+    factory = get_session_factory()
+    async with factory() as db:
+        # Check if user exists by google_id or email
+        result = await db.execute(
+            select(User).where(
+                (User.google_id == google_info["google_id"]) |
+                (User.email == google_info["email"])
+            )
+        )
+        user = result.scalar_one_or_none()
+
+        if user:
+            # Update Google info if needed
+            if not user.google_id:
+                user.google_id = google_info["google_id"]
+            if google_info.get("picture"):
+                user.picture = google_info["picture"]
+            if google_info.get("name") and not user.name:
+                user.name = google_info["name"]
+            await db.commit()
+        else:
+            # Create new user
+            user = User(
+                id=str(uuid.uuid4()),
+                email=google_info["email"],
+                name=google_info.get("name", google_info["email"].split("@")[0]),
+                google_id=google_info["google_id"],
+                picture=google_info.get("picture", ""),
+            )
+            db.add(user)
+            await db.commit()
+
+        token = create_token(user.id, user.email, user.name)
+
+        logger.info("Google auth: %s", user.email)
+        return AuthResponse(
+            token=token,
+            user={"id": user.id, "email": user.email, "name": user.name},
+        )
+
+
+@app.get("/api/auth/me")
+async def get_me(user: dict = Depends(get_current_user)):
+    """Get the current authenticated user's info."""
+    return {
+        "id": user.get("sub"),
+        "email": user.get("email"),
+        "name": user.get("name"),
     }
 
 
 # --- SSE Research Endpoint ---
 @app.post("/api/research")
-async def research(request: ResearchRequest):
+async def research(
+    request: ResearchRequest,
+    user: dict = Depends(get_current_user),
+):
     """
     Start a research session. Streams SSE events as the agent works.
+    Requires authentication.
 
     Events streamed:
         - phase: Current phase (planning, searching, reading, writing, reflecting)
@@ -120,21 +343,16 @@ async def research(request: ResearchRequest):
         - follow_up: Suggested follow-up questions
         - done: Final session metadata
     """
-    logger.info("Research request: %s", request.query[:100])
+    user_id = user.get("sub", "")
+    logger.info("Research request from %s: %s", user.get("email"), request.query[:100])
+
+    # Check rate limit
+    await check_rate_limit(user_id)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         """Generate SSE events from the research agent."""
         session_id = request.session_id or str(uuid.uuid4())
-        collected_events = []
 
-        async def sse_callback(event_type: str, data: dict):
-            """Callback for agent nodes to emit SSE events."""
-            event_str = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-            collected_events.append((event_type, data))
-            return event_str
-
-        # We need a different approach: collect and yield
-        # Use an async queue for real-time streaming
         import asyncio
         event_queue: asyncio.Queue = asyncio.Queue()
 
@@ -183,7 +401,6 @@ async def research(request: ResearchRequest):
                 await event_queue.put(("_final_state", {"error": str(e)}))
 
         # Start agent in background task
-        import asyncio
         agent_task = asyncio.create_task(run_agent())
 
         # Stream events from the queue
@@ -209,6 +426,7 @@ async def research(request: ResearchRequest):
                             session_id=session_id,
                             query=request.query,
                             final_state=final,
+                            user_id=user_id,
                         )
                     except Exception as e:
                         logger.error("Failed to save session: %s", e)
@@ -242,14 +460,18 @@ async def research(request: ResearchRequest):
 
 # --- Session Endpoints ---
 @app.get("/api/sessions")
-async def list_sessions(limit: int = 20):
-    """List recent research sessions."""
+async def list_sessions(
+    limit: int = 20,
+    user: dict = Depends(get_current_user),
+):
+    """List recent research sessions for the authenticated user."""
+    user_id = user.get("sub", "")
     try:
-        from app.models.database import get_session_factory
         factory = get_session_factory()
         async with factory() as db:
             result = await db.execute(
                 select(ResearchQuery)
+                .where(ResearchQuery.user_id == user_id)
                 .order_by(desc(ResearchQuery.created_at))
                 .limit(limit)
             )
@@ -270,15 +492,21 @@ async def list_sessions(limit: int = 20):
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
-    """Retrieve a past research session."""
+async def get_session(
+    session_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Retrieve a past research session (only if owned by user)."""
+    user_id = user.get("sub", "")
     try:
-        from app.models.database import get_session_factory
         factory = get_session_factory()
         async with factory() as db:
             result = await db.execute(
                 select(ResearchQuery)
-                .where(ResearchQuery.session_id == session_id)
+                .where(
+                    ResearchQuery.session_id == session_id,
+                    ResearchQuery.user_id == user_id,
+                )
                 .order_by(desc(ResearchQuery.created_at))
                 .limit(1)
             )
@@ -305,20 +533,25 @@ async def get_session(session_id: str):
         raise HTTPException(status_code=500, detail="Failed to retrieve session")
 
 
-async def _save_session(session_id: str, query: str, final_state: dict) -> None:
+async def _save_session(
+    session_id: str,
+    query: str,
+    final_state: dict,
+    user_id: str = "",
+) -> None:
     """Save a completed research session to the database."""
     try:
-        from app.models.database import get_session_factory
         factory = get_session_factory()
         async with factory() as db:
             # Create session
-            session = ResearchSession(id=session_id)
+            session = ResearchSession(id=session_id, user_id=user_id or None)
             db.add(session)
 
             # Create query record
             sources = final_state.get("all_sources", final_state.get("search_results", []))
             research_query = ResearchQuery(
                 session_id=session_id,
+                user_id=user_id or None,
                 query=query,
                 sub_queries=final_state.get("sub_queries", []),
                 answer=final_state.get("draft_answer", ""),

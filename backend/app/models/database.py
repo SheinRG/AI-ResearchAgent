@@ -1,6 +1,6 @@
 """
 SQLAlchemy async models for PostgreSQL persistence.
-Stores research sessions and individual queries with their results.
+Stores users, research sessions, and individual queries with their results.
 """
 
 import uuid
@@ -22,14 +22,31 @@ class Base(DeclarativeBase):
     pass
 
 
+class User(Base):
+    """A registered user of the platform."""
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, default="")
+    password_hash = Column(String, nullable=True)  # Null for Google-only users
+    google_id = Column(String, nullable=True, unique=True, index=True)
+    picture = Column(String, default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    sessions = relationship("ResearchSession", back_populates="user", cascade="all, delete-orphan")
+
+
 class ResearchSession(Base):
     """A research session that can contain multiple queries."""
     __tablename__ = "research_sessions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    user = relationship("User", back_populates="sessions")
     queries = relationship("ResearchQuery", back_populates="session", cascade="all, delete-orphan")
 
 
@@ -39,6 +56,7 @@ class ResearchQuery(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id = Column(String, ForeignKey("research_sessions.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     query = Column(Text, nullable=False)
     sub_queries = Column(JSON, default=list)
     answer = Column(Text, default="")

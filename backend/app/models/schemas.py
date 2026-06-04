@@ -7,15 +7,43 @@ from typing import Optional
 import uuid
 
 
+# --- Auth Schemas ---
+
+class RegisterRequest(BaseModel):
+    """User registration request."""
+    email: str = Field(..., description="User email")
+    password: str = Field(..., min_length=6, description="User password (min 6 chars)")
+    name: str = Field(default="", description="Display name")
+
+
+class LoginRequest(BaseModel):
+    """User login request."""
+    email: str = Field(..., description="User email")
+    password: str = Field(..., description="User password")
+
+
+class GoogleAuthRequest(BaseModel):
+    """Google OAuth login request."""
+    credential: str = Field(..., description="Google ID token")
+
+
+class AuthResponse(BaseModel):
+    """Authentication response with JWT token."""
+    token: str
+    user: dict
+
+
+# --- Research Schemas ---
+
 class ResearchRequest(BaseModel):
     """Incoming research query from the frontend."""
     query: str = Field(..., min_length=1, max_length=2000, description="The research question")
-    max_iterations: int = Field(default=2, ge=1, le=5, description="Max reflection loops")
+    max_iterations: int = Field(default=1, ge=1, le=5, description="Max reflection loops")
     session_id: Optional[str] = Field(default=None, description="Existing session ID for follow-ups")
 
 
 class SearchResult(BaseModel):
-    """A single search result from DuckDuckGo."""
+    """A single search result from web search."""
     url: str
     title: str
     domain: str

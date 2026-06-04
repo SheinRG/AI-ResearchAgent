@@ -5,6 +5,8 @@ import { motion } from "motion/react";
 import SearchBar from "@/components/SearchBar";
 import ThemeToggle from "@/components/ThemeToggle";
 import useResearchStore from "@/stores/researchStore";
+import { useAuth } from "@/hooks/useAuth";
+import { useEffect } from "react";
 
 const EXAMPLE_QUERIES = [
   "Latest breakthroughs in quantum computing",
@@ -18,6 +20,13 @@ const EXAMPLE_QUERIES = [
 export default function HomePage() {
   const router = useRouter();
   const { recentSearches } = useResearchStore();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   const handleSearch = (query) => {
     const encoded = encodeURIComponent(query);
@@ -36,6 +45,8 @@ export default function HomePage() {
     return `${days}d ago`;
   };
 
+  if (isLoading || !isAuthenticated) return null;
+
   return (
     <>
       {/* Navbar */}
@@ -45,6 +56,8 @@ export default function HomePage() {
           Research Agent
         </a>
         <div className="navbar-actions">
+          {user && <span className="navbar-user">{user.name || user.email}</span>}
+          <button className="logout-button" onClick={logout}>Log out</button>
           <ThemeToggle />
         </div>
       </nav>

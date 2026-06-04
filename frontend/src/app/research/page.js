@@ -12,6 +12,7 @@ import SkeletonLoader from "@/components/SkeletonLoader";
 import ThemeToggle from "@/components/ThemeToggle";
 import useResearch from "@/hooks/useResearch";
 import useResearchStore from "@/stores/researchStore";
+import { useAuth } from "@/hooks/useAuth";
 
 function ResearchContent() {
   const searchParams = useSearchParams();
@@ -19,6 +20,8 @@ function ResearchContent() {
   const query = searchParams.get("q") || "";
   const hasStarted = useRef(false);
   const lastQuery = useRef("");
+
+  const { token, user, isAuthenticated, isLoading, logout } = useAuth();
 
   const {
     phase,
@@ -37,15 +40,21 @@ function ResearchContent() {
 
   const { addRecentSearch } = useResearchStore();
 
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
   // Start research when query changes
   useEffect(() => {
-    if (query && query !== lastQuery.current) {
+    if (query && query !== lastQuery.current && token) {
       lastQuery.current = query;
       hasStarted.current = true;
       addRecentSearch(query);
-      startResearch(query);
+      startResearch(query, 1, token);
     }
-  }, [query, startResearch, addRecentSearch]);
+  }, [query, startResearch, addRecentSearch, token]);
 
   const handleNewSearch = (newQuery) => {
     const encoded = encodeURIComponent(newQuery);
@@ -61,6 +70,8 @@ function ResearchContent() {
 
   const showSkeleton = isStreaming && !answer && sources.length === 0;
 
+  if (isLoading || !isAuthenticated) return null;
+
   return (
     <>
       {/* Navbar with compact search */}
@@ -70,6 +81,8 @@ function ResearchContent() {
           Research Agent
         </a>
         <div className="navbar-actions">
+          {user && <span className="navbar-user">{user.name || user.email}</span>}
+          <button className="logout-button" onClick={logout}>Log out</button>
           <ThemeToggle />
         </div>
       </nav>

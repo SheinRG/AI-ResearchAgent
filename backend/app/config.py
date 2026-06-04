@@ -13,10 +13,13 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # --- Ollama (Local LLM) ---
-    ollama_host: str = "http://host.docker.internal:11434"
-    ollama_model: str = "llama3.1:8b"
-    ollama_timeout: int = 120  # seconds
+    # --- Groq (Cloud LLM) ---
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.1-8b-instant"
+    groq_timeout: int = 60  # seconds
+
+    # --- Serper (Search API) ---
+    serper_api_key: str = ""
 
     # --- Redis ---
     redis_url: str = "redis://redis:6379/0"
@@ -24,6 +27,11 @@ class Settings(BaseSettings):
 
     # --- PostgreSQL ---
     database_url: str = "postgresql+asyncpg://agent:agent@postgres:5432/research_agent"
+
+    # --- Auth ---
+    auth_secret: str = "change-me-in-production-use-a-random-string"
+    google_client_id: str = ""
+    auth_token_expiry_hours: int = 72  # 3 days
 
     # --- Agent Settings ---
     max_iterations: int = 1
@@ -33,6 +41,9 @@ class Settings(BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 50
     rerank_top_k: int = 10
+
+    # --- Rate Limiting ---
+    rate_limit_per_hour: int = 30  # research queries per user per hour
 
     # --- Server ---
     host: str = "0.0.0.0"
@@ -54,9 +65,8 @@ def get_settings() -> Settings:
     """Get cached settings instance."""
     settings = Settings()
     logger.info(
-        "Settings loaded: ollama=%s model=%s redis=%s",
-        settings.ollama_host,
-        settings.ollama_model,
+        "Settings loaded: groq_model=%s redis=%s",
+        settings.groq_model,
         settings.redis_url,
     )
     return settings

@@ -1,20 +1,20 @@
 """
-DuckDuckGo web search service.
-Uses the duckduckgo-search library (no API key required).
-Runs synchronous search in a thread executor for async compatibility.
+Serper.dev web search service.
+Uses the Serper Google Search API for fast, reliable search results.
 """
 
-import asyncio
 import logging
 from typing import Optional
 from urllib.parse import urlparse
 
-from duckduckgo_search import DDGS
+import httpx
 
 from app.models.schemas import SearchResult
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+SERPER_ENDPOINT = "https://google.serper.dev/search"
 
 
 async def search_web(
@@ -22,7 +22,7 @@ async def search_web(
     max_results: Optional[int] = None,
 ) -> list[SearchResult]:
     """
-    Search the web using DuckDuckGo.
+    Search the web using the Serper.dev Google Search API.
 
     Args:
         query: The search query string.
@@ -35,23 +35,33 @@ async def search_web(
     if max_results is None:
         max_results = settings.search_results_per_query
 
-    try:
-        # Run synchronous DuckDuckGo search in thread executor
-        loop = asyncio.get_event_loop()
-        raw_results = await loop.run_in_executor(
-            None,
-            _sync_search,
-            query,
-            max_results,
-        )
+    headers = {
+        "X-API-KEY": settings.serper_api_key,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "q": query,
+        "num": max_results,
+    }
 
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                SERPER_ENDPOINT,
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        raw_results = data.get("organic", [])
         results = []
         seen_domains = set()
 
         for r in raw_results:
-            url = r.get("href", r.get("link", ""))
+            url = r.get("link", "")
             title = r.get("title", "")
-            snippet = r.get("body", r.get("snippet", ""))
+            snippet = r.get("snippet", "")
 
             if not url or not title:
                 continue
@@ -73,24 +83,15 @@ async def search_web(
                 snippet=snippet[:300] if snippet else "",
             ))
 
-        logger.info("DuckDuckGo search for '%s': %d results", query, len(results))
+        logger.info("Serper search for '%s': %d results", query, len(results))
         return results
 
-    except Exception as e:
-        logger.error("DuckDuckGo search failed for '%s': %s", query, e)
+    except httpx.TimeoutException:
+        logger.error("Serper search timed out for '%s'", query)
         return []
-
-
-def _sync_search(query: str, max_results: int) -> list[dict]:
-    """Synchronous DuckDuckGo search (runs in executor)."""
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(
-                query,
-                max_results=max_results,
-                safesearch="moderate",
-            ))
-            return results
+    except httpx.HTTPStatusError as e:
+        logger.error("Serper HTTP error for '%s': %s", query, e.response.status_code)
+        return []
     except Exception as e:
-        logger.error("DuckDuckGo sync search error: %s", e)
+        logger.error("Serper search failed for '%s': %s", query, e)
         return []

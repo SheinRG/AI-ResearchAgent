@@ -1,6 +1,8 @@
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
+import { AuthProvider } from "@/components/AuthProvider";
+
 export const metadata = {
   title: "AI Research Agent — Deep Research, Cited Answers",
   description:
@@ -25,7 +27,9 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <ThemeProvider>
-          <div className="app-container">{children}</div>
+          <AuthProvider>
+            <div className="app-container">{children}</div>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -23,7 +23,7 @@ export default function useResearch() {
 
   const abortRef = useRef(null);
 
-  const startResearch = useCallback(async (query, maxIterations = 2) => {
+  const startResearch = useCallback(async (query, maxIterations = 1, token = null) => {
     // Reset state
     setPhase(null);
     setPhaseMessage("");
@@ -44,9 +44,14 @@ export default function useResearch() {
     abortRef.current = controller;
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(`${API_BASE}/api/research`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ query, max_iterations: maxIterations }),
         signal: controller.signal,
       });

@@ -1,5 +1,4 @@
 # AI Research Agent — Backend Dependencies
-# All free, no paid APIs required
 
 # --- Core Framework ---
 fastapi==0.115.6
@@ -14,8 +13,8 @@ httpx==0.28.1
 langgraph==0.2.60
 langchain-core==0.3.28
 
-# --- Web Search (No API Key) ---
-duckduckgo-search==7.5.3
+# --- Cloud LLM (Groq) ---
+groq==0.25.0
 
 # --- Web Scraping ---
 trafilatura==2.0.0
@@ -29,6 +28,10 @@ asyncpg==0.30.0
 
 # --- Redis Cache ---
 redis[hiredis]==5.2.1
+
+# --- Auth ---
+PyJWT==2.10.1
+bcrypt==4.2.1
 
 # --- Utilities ---
 python-dotenv==1.0.1
