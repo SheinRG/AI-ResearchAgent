@@ -1,7 +1,7 @@
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
-
 import { AuthProvider } from "@/components/AuthProvider";
+import AppLayout from "@/components/AppLayout";
 
 export const metadata = {
   title: "AI Research Agent — Deep Research, Cited Answers",
@@ -21,14 +21,16 @@ export default function RootLayout({ children }) {
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
       </head>
       <body>
         <ThemeProvider>
           <AuthProvider>
-            <div className="app-container">{children}</div>
+            <AppLayout>
+              <div className="app-container">{children}</div>
+            </AppLayout>
           </AuthProvider>
         </ThemeProvider>
       </body>

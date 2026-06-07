@@ -74,19 +74,6 @@ function ResearchContent() {
 
   return (
     <>
-      {/* Navbar with compact search */}
-      <nav className="navbar">
-        <a href="/" className="navbar-brand">
-          <span className="navbar-brand-icon">🔬</span>
-          Research Agent
-        </a>
-        <div className="navbar-actions">
-          {user && <span className="navbar-user">{user.name || user.email}</span>}
-          <button className="logout-button" onClick={logout}>Log out</button>
-          <ThemeToggle />
-        </div>
-      </nav>
-
       <main className="main-content">
         <div className="research-page">
           {/* Query Display */}
