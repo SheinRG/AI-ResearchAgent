@@ -8,6 +8,7 @@ export function ThemeProvider({ children }) {
       attribute="data-theme"
       defaultTheme="dark"
       enableSystem={false}
+      disableTransitionOnChange
     >
       {children}
     </NextThemesProvider>
