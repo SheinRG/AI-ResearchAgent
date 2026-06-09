@@ -13,17 +13,22 @@ from app.models.schemas import RankedChunk
 
 logger = logging.getLogger(__name__)
 
-# Singleton ranker instance
+import threading
+
+# Singleton ranker instance and lock
 _ranker: Optional[Ranker] = None
+_ranker_lock = threading.Lock()
 
 
 def _get_ranker() -> Ranker:
-    """Get or initialize the FlashRank ranker (singleton)."""
+    """Get or initialize the FlashRank ranker (singleton) safely."""
     global _ranker
     if _ranker is None:
-        logger.info("Initializing FlashRank ranker (nano model)...")
-        _ranker = Ranker(model_name="ms-marco-TinyBERT-L-2-v2", cache_dir="/tmp/flashrank")
-        logger.info("FlashRank ranker initialized successfully")
+        with _ranker_lock:
+            if _ranker is None:
+                logger.info("Initializing FlashRank ranker (nano model)...")
+                _ranker = Ranker(model_name="ms-marco-TinyBERT-L-2-v2", cache_dir="/tmp/flashrank")
+                logger.info("FlashRank ranker initialized successfully")
     return _ranker
 
 
