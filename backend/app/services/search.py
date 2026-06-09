@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 SERPER_ENDPOINT = "https://google.serper.dev/search"
 
+_client: Optional[httpx.AsyncClient] = None
+
+def _get_client() -> httpx.AsyncClient:
+    """Get or create a persistent HTTP client for reusing connections."""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=30)
+    return _client
+
 
 async def search_web(
     query: str,
@@ -45,14 +54,14 @@ async def search_web(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                SERPER_ENDPOINT,
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
+        client = _get_client()
+        response = await client.post(
+            SERPER_ENDPOINT,
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
 
         raw_results = data.get("organic", [])
         results = []
