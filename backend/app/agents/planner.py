@@ -86,9 +86,19 @@ async def planner_node(state: ResearchState) -> dict:
             logger.warning("Planner returned invalid sub_queries, using fallback")
             sub_queries = [query]
 
-        # Ensure 2-4 queries
-        sub_queries = [q.strip() for q in sub_queries if q.strip()][:4]
-        if len(sub_queries) < 2:
+        # Ensure 2-4 queries and deduplicate to prevent redundant pipeline execution
+        seen = set()
+        clean_queries = []
+        for q in sub_queries:
+            q_clean = q.strip()
+            if q_clean and q_clean.lower() not in seen:
+                seen.add(q_clean.lower())
+                clean_queries.append(q_clean)
+        
+        sub_queries = clean_queries[:4]
+        
+        # Add original query as fallback if we don't have enough distinct sub-queries
+        if len(sub_queries) < 2 and query.lower() not in seen:
             sub_queries.append(query)
 
         logger.info("Planner generated %d sub-queries: %s", len(sub_queries), sub_queries)
