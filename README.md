@@ -106,6 +106,8 @@ Copy `.env.example` to `.env` and adjust the variables:
 | `GROQ_API_KEY` | API key for Groq Cloud LLM | `your-groq-api-key-here` |
 | `GROQ_MODEL` | Groq LLM model identifier | `llama-3.1-8b-instant` |
 | `SERPER_API_KEY` | API key for Serper search API | `your-serper-api-key-here` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://agent:agent@postgres:5432/research_agent` |
+| `REDIS_URL` | Redis connection URL | `redis://redis:6379/0` |
 | `AUTH_SECRET` | Secret key used for session authentication | `change-me-in-production-use-a-random-string` |
 | `GOOGLE_CLIENT_ID` | Client ID for Google OAuth integration | `your-google-client-id-here` |
 | `OLLAMA_MODEL` | Ollama model override (for local model setups) | `llama3.2:3b` |
