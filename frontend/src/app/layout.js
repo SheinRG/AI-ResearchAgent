@@ -4,10 +4,10 @@ import { AuthProvider } from "@/components/AuthProvider";
 import AppLayout from "@/components/AppLayout";
 
 export const metadata = {
-  title: "AI Research Agent — Deep Research, Cited Answers",
+  title: "Aura — Illuminated Intelligence",
   description:
-    "An autonomous AI research agent that searches the web, analyzes sources, and delivers comprehensive cited answers. Powered by local LLMs — 100% free, zero API keys.",
-  keywords: ["AI research", "search agent", "cited answers", "Perplexity clone"],
+    "An autonomous AI research agent that searches the web, analyzes sources, and delivers comprehensive cited answers.",
+  keywords: ["AI research", "search agent", "cited answers", "deep research"],
 };
 
 export default function RootLayout({ children }) {
@@ -21,7 +21,7 @@ export default function RootLayout({ children }) {
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
       </head>

@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "motion/react";
 import { useRouter } from "next/navigation";
+import { ArrowRightIcon } from "@/components/Icons";
 
 export default function FollowUpChips({ suggestions = [] }) {
   const router = useRouter();
@@ -32,7 +33,9 @@ export default function FollowUpChips({ suggestions = [] }) {
               }}
               whileHover={{ x: 4 }}
             >
-              <span className="followup-chip-icon">→</span>
+              <span className="followup-chip-icon">
+                <ArrowRightIcon width={16} height={16} />
+              </span>
               {suggestion}
             </motion.button>
           ))}

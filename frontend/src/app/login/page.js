@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useAuth } from "@/hooks/useAuth";
 import ThemeToggle from "@/components/ThemeToggle";
+import { LogoMark } from "@/components/Icons";
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -92,8 +93,12 @@ export default function LoginPage() {
     <>
       <nav className="navbar">
         <a href="/" className="navbar-brand">
-          <span className="navbar-brand-icon">🔬</span>
-          Research Agent
+          <span className="navbar-brand-icon">
+            <LogoMark size={24} />
+          </span>
+          <span className="brand-text">
+            aura<span className="wordmark-accent">.ai</span>
+          </span>
         </a>
         <div className="navbar-actions">
           <ThemeToggle />
@@ -107,6 +112,9 @@ export default function LoginPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
+          <div className="login-logo">
+            <LogoMark size={40} />
+          </div>
           <h1 className="login-title">{isLogin ? "Welcome back" : "Create account"}</h1>
           <p className="login-subtitle">
             {isLogin ? "Log in to view your research history." : "Sign up to start researching."}

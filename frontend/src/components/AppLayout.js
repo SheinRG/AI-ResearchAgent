@@ -6,6 +6,13 @@ import useResearchStore from "@/stores/researchStore";
 import ThemeToggle from "@/components/ThemeToggle";
 import { motion, AnimatePresence } from "motion/react";
 import { useState } from "react";
+import {
+  LogoMark,
+  PlusIcon,
+  MenuIcon,
+  CloseIcon,
+  LogoutIcon,
+} from "@/components/Icons";
 
 export default function AppLayout({ children }) {
   const pathname = usePathname();
@@ -56,11 +63,15 @@ export default function AppLayout({ children }) {
           onClick={() => setIsMobileOpen(!isMobileOpen)}
           aria-label="Toggle Navigation Menu"
         >
-          ☰
+          <MenuIcon />
         </button>
         <a href="/" className="navbar-brand">
-          <span className="navbar-brand-icon">🔬</span>
-          <span className="brand-text">Research Agent</span>
+          <span className="navbar-brand-icon">
+            <LogoMark size={24} />
+          </span>
+          <span className="brand-text">
+            aura<span className="wordmark-accent">.ai</span>
+          </span>
         </a>
         <div style={{ marginLeft: "auto" }}>
           <ThemeToggle />
@@ -71,19 +82,27 @@ export default function AppLayout({ children }) {
       <aside className={`sidebar-container ${isMobileOpen ? "mobile-open" : ""}`}>
         <div className="sidebar-brand">
           <a href="/" className="navbar-brand">
-            <span className="navbar-brand-icon">🔬</span>
-            <span className="brand-text">Research Agent</span>
+            <span className="navbar-brand-icon">
+              <LogoMark size={26} />
+            </span>
+            <span className="brand-text">
+              aura<span className="wordmark-accent">.ai</span>
+            </span>
           </a>
           <button
             className="mobile-close-btn"
             onClick={() => setIsMobileOpen(false)}
+            aria-label="Close navigation menu"
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
 
         <button className="sidebar-new-btn" onClick={handleNewResearch}>
-          <span className="plus-icon">+</span> New Thread
+          <span className="plus-icon">
+            <PlusIcon width={18} height={18} />
+          </span>
+          New Research
         </button>
 
         <nav className="sidebar-nav">
@@ -138,6 +157,7 @@ export default function AppLayout({ children }) {
           <div className="sidebar-actions-row">
             <ThemeToggle />
             <button className="sidebar-logout-btn" onClick={logout}>
+              <LogoutIcon width={16} height={16} />
               Log Out
             </button>
           </div>

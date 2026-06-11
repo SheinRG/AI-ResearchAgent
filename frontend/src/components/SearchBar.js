@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion } from "motion/react";
+import { SearchIcon, ArrowUpIcon } from "@/components/Icons";
 
 const PLACEHOLDERS = [
+  "Ask anything...",
   "What are the latest breakthroughs in quantum computing?",
-  "How does CRISPR gene editing work and what are its applications?",
-  "Compare the economic policies of keynesian vs austrian economics",
+  "How does CRISPR gene editing work?",
   "What is the current state of nuclear fusion research?",
   "Explain the implications of recent AI regulation proposals",
 ];
@@ -49,6 +50,9 @@ export default function SearchBar({ onSearch, mode = "large", disabled = false }
         onSubmit={handleSubmit}
         className={`search-bar ${mode === "large" ? "search-bar-large" : "search-bar-compact"}`}
       >
+        <span className="search-leading-icon">
+          <SearchIcon width={18} height={18} />
+        </span>
         <input
           ref={inputRef}
           id="search-input"
@@ -66,11 +70,10 @@ export default function SearchBar({ onSearch, mode = "large", disabled = false }
           type="submit"
           className="search-submit"
           disabled={!query.trim() || disabled}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.94 }}
           aria-label="Start research"
         >
-          →
+          <ArrowUpIcon width={18} height={18} />
         </motion.button>
       </form>
     </motion.div>

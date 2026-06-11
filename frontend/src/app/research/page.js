@@ -13,6 +13,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import useResearch from "@/hooks/useResearch";
 import useResearchStore from "@/stores/researchStore";
 import { useAuth } from "@/hooks/useAuth";
+import { AlertIcon, CheckCircleIcon } from "@/components/Icons";
 
 function ResearchContent() {
   const searchParams = useSearchParams();
@@ -101,7 +102,9 @@ function ResearchContent() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
             >
-              <div className="error-icon">⚠️</div>
+              <div className="error-icon">
+                <AlertIcon width={32} height={32} />
+              </div>
               <div className="error-title">Something went wrong</div>
               <div className="error-message">{error}</div>
               <button
@@ -138,6 +141,7 @@ function ResearchContent() {
                   doneData.confidence
                 )}`}
               >
+                <CheckCircleIcon width={14} height={14} />
                 {Math.round((doneData.confidence || 0) * 100)}% confidence
               </span>
               <span className="done-separator" />
