@@ -5,6 +5,8 @@ using Ollama's structured JSON output.
 """
 
 import logging
+from datetime import date
+
 from app.services.llm import get_llm_client
 from app.agents.state import ResearchState
 
@@ -15,12 +17,13 @@ PLANNER_SYSTEM = """You are a research planning assistant. Your job is to break 
 Rules:
 - Generate 2-4 sub-queries that together cover the full scope of the original question
 - Each sub-query should be specific and searchable (good for web search)
-- Include temporal context if relevant (e.g., "2024-2025")
+- For time-sensitive topics, anchor recency to the current year ({current_year}) — e.g. "... {current_year}" or "latest {current_year}"
 - Each sub-query should target a different aspect of the question
-- Do NOT repeat the original question as a sub-query
+- Prefer authoritative angles (official data, primary sources, expert analysis)
+- Do NOT repeat the original question verbatim as a sub-query
 
 Respond ONLY with valid JSON in this exact format:
-{"sub_queries": ["sub-query 1", "sub-query 2", "sub-query 3"]}"""
+{{"sub_queries": ["sub-query 1", "sub-query 2", "sub-query 3"]}}"""
 
 PLANNER_PROMPT_TEMPLATE = """Break down this research question into 2-4 focused, searchable sub-queries:
 
@@ -70,12 +73,13 @@ async def planner_node(state: ResearchState) -> dict:
         query=query,
         refinement_context=refinement_context,
     )
+    system = PLANNER_SYSTEM.format(current_year=date.today().year)
 
     try:
         llm = get_llm_client()
         result = await llm.generate_structured(
             prompt=prompt,
-            system=PLANNER_SYSTEM,
+            system=system,
             temperature=0.3,
         )
 

@@ -1,7 +1,7 @@
 """
 Web scraping service using Trafilatura for content extraction.
-Fetches pages with httpx and extracts clean text using Trafilatura.
-Supports parallel scraping via asyncio.gather.
+Fetches pages with a shared, connection-pooled httpx client and extracts
+clean text using Trafilatura. Scrapes URLs in parallel with a concurrency cap.
 """
 
 import asyncio
@@ -10,6 +10,8 @@ from typing import Optional
 
 import httpx
 import trafilatura
+
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,43 +26,63 @@ _HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# Shared client so connections (and keep-alive) are reused across scrapes
+# instead of opening a fresh TCP/TLS handshake for every single URL.
+_client: Optional[httpx.AsyncClient] = None
 
-async def scrape_url(url: str, timeout: int = 15) -> Optional[str]:
+
+def _get_client() -> httpx.AsyncClient:
+    """Get or create the shared, pooled scraping client."""
+    global _client
+    if _client is None:
+        settings = get_settings()
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(settings.scrape_timeout),
+            follow_redirects=True,
+            headers=_HEADERS,
+            limits=httpx.Limits(
+                max_connections=settings.scrape_max_concurrent * 2,
+                max_keepalive_connections=settings.scrape_max_concurrent,
+            ),
+        )
+    return _client
+
+
+async def close_scraper() -> None:
+    """Close the shared scraping client (call on shutdown)."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+        logger.info("Scraper client closed")
+
+
+async def scrape_url(url: str) -> Optional[str]:
     """
     Fetch a URL and extract its main text content using Trafilatura.
 
     Args:
         url: The URL to scrape.
-        timeout: Request timeout in seconds.
 
     Returns:
         Extracted text content, or None if extraction fails.
     """
     try:
-        async with httpx.AsyncClient(
-            timeout=timeout,
-            follow_redirects=True,
-            headers=_HEADERS,
-        ) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            html = response.text
+        client = _get_client()
+        response = await client.get(url)
+        response.raise_for_status()
+        html = response.text
 
-        # Run Trafilatura extraction in thread executor (it's CPU-bound)
-        loop = asyncio.get_event_loop()
-        text = await loop.run_in_executor(
-            None,
-            _extract_text,
-            html,
-            url,
-        )
+        # Run Trafilatura extraction in a thread (it's CPU-bound) so it doesn't
+        # block the event loop while other scrapes are in flight.
+        loop = asyncio.get_running_loop()
+        text = await loop.run_in_executor(None, _extract_text, html, url)
 
         if text and len(text.strip()) > 50:
             logger.info("Scraped %s: %d chars", url, len(text))
             return text.strip()
-        else:
-            logger.warning("Scraped %s but got minimal content", url)
-            return None
+        logger.warning("Scraped %s but got minimal content", url)
+        return None
 
     except httpx.TimeoutException:
         logger.warning("Scrape timeout for %s", url)
@@ -76,7 +98,7 @@ async def scrape_url(url: str, timeout: int = 15) -> Optional[str]:
 def _extract_text(html: str, url: str) -> Optional[str]:
     """Extract text from HTML using Trafilatura (synchronous)."""
     try:
-        text = trafilatura.extract(
+        return trafilatura.extract(
             html,
             url=url,
             include_comments=False,
@@ -84,34 +106,38 @@ def _extract_text(html: str, url: str) -> Optional[str]:
             no_fallback=False,
             favor_precision=True,
         )
-        return text
     except Exception as e:
         logger.warning("Trafilatura extraction error: %s", e)
         return None
 
 
-async def scrape_urls(urls: list[str], timeout: int = 15, max_concurrent: int = 5) -> dict[str, Optional[str]]:
+async def scrape_urls(
+    urls: list[str],
+    max_concurrent: Optional[int] = None,
+) -> dict[str, Optional[str]]:
     """
     Scrape multiple URLs in parallel with a concurrency limit.
 
     Args:
         urls: List of URLs to scrape.
-        timeout: Per-request timeout in seconds.
         max_concurrent: Maximum number of concurrent scrape requests.
 
     Returns:
         Dict mapping URL → extracted text (or None on failure).
     """
+    if max_concurrent is None:
+        max_concurrent = get_settings().scrape_max_concurrent
+
     sem = asyncio.Semaphore(max_concurrent)
 
     async def _scrape_with_sem(url: str):
         async with sem:
-            return await scrape_url(url, timeout)
+            return await scrape_url(url)
 
     tasks = [_scrape_with_sem(url) for url in urls]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    scraped = {}
+    scraped: dict[str, Optional[str]] = {}
     for url, result in zip(urls, results):
         if isinstance(result, Exception):
             logger.warning("Scrape exception for %s: %s", url, result)

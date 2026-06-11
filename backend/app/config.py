@@ -15,8 +15,13 @@ class Settings(BaseSettings):
 
     # --- Groq (Cloud LLM) ---
     groq_api_key: str = ""
+    # Fast model for structured/auxiliary tasks (planning, reflection).
     groq_model: str = "llama-3.1-8b-instant"
+    # Stronger model for the final synthesized answer. Set equal to groq_model
+    # to trade answer quality for lower cost/latency.
+    groq_synth_model: str = "llama-3.3-70b-versatile"
     groq_timeout: int = 60  # seconds
+    synth_max_tokens: int = 3072  # max answer length for the synthesizer
 
     # --- Serper (Search API) ---
     serper_api_key: str = ""
@@ -41,7 +46,18 @@ class Settings(BaseSettings):
     scrape_top_n: int = 3
     chunk_size: int = 500
     chunk_overlap: int = 50
-    rerank_top_k: int = 10
+    rerank_top_k: int = 12
+    # Max distinct sources surfaced to the model + UI for citation.
+    max_cited_sources: int = 8
+
+    # --- Re-ranker ---
+    # ms-marco-MiniLM-L-12-v2 ranks noticeably better than the TinyBERT nano
+    # model for a small CPU cost. Use "ms-marco-TinyBERT-L-2-v2" for max speed.
+    reranker_model: str = "ms-marco-MiniLM-L-12-v2"
+
+    # --- Scraper ---
+    scrape_timeout: int = 15
+    scrape_max_concurrent: int = 8
 
     # --- Rate Limiting ---
     rate_limit_per_hour: int = 30  # research queries per user per hour

@@ -65,7 +65,7 @@ async def search_web(
 
         raw_results = data.get("organic", [])
         results = []
-        seen_domains = set()
+        domain_counts: dict[str, int] = {}
 
         for r in raw_results:
             url = r.get("link", "")
@@ -77,10 +77,11 @@ async def search_web(
 
             domain = urlparse(url).netloc.replace("www.", "")
 
-            # Skip duplicate domains for diversity
-            if domain in seen_domains:
+            # Cap results per domain for diversity, but keep up to 2 so an
+            # authoritative site isn't reduced to a single page.
+            if domain_counts.get(domain, 0) >= 2:
                 continue
-            seen_domains.add(domain)
+            domain_counts[domain] = domain_counts.get(domain, 0) + 1
 
             favicon = f"https://www.google.com/s2/favicons?domain={domain}&sz=32"
 

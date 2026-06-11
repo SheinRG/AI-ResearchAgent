@@ -35,13 +35,19 @@ export default function useResearch() {
         break;
 
       case "sources":
-        setSources((prev) => {
-          const existing = new Set(prev.map((s) => s.url));
-          const newSources = (data.sources || []).filter(
-            (s) => !existing.has(s.url)
-          );
-          return [...prev, ...newSources];
-        });
+        // `replace` carries the authoritative, citation-ordered list: index i
+        // here is exactly the [i] marker in the answer, so swap it in wholesale.
+        if (data.replace) {
+          setSources(data.sources || []);
+        } else {
+          setSources((prev) => {
+            const existing = new Set(prev.map((s) => s.url));
+            const newSources = (data.sources || []).filter(
+              (s) => !existing.has(s.url)
+            );
+            return [...prev, ...newSources];
+          });
+        }
         break;
 
       case "token":

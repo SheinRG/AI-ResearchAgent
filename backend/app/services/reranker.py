@@ -7,13 +7,14 @@ import asyncio
 import logging
 from typing import Optional
 
+import threading
+
 from flashrank import Ranker, RerankRequest
 
 from app.models.schemas import RankedChunk
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
-
-import threading
 
 # Singleton ranker instance and lock
 _ranker: Optional[Ranker] = None
@@ -26,8 +27,9 @@ def _get_ranker() -> Ranker:
     if _ranker is None:
         with _ranker_lock:
             if _ranker is None:
-                logger.info("Initializing FlashRank ranker (nano model)...")
-                _ranker = Ranker(model_name="ms-marco-TinyBERT-L-2-v2", cache_dir="/tmp/flashrank")
+                model_name = get_settings().reranker_model
+                logger.info("Initializing FlashRank ranker (%s)...", model_name)
+                _ranker = Ranker(model_name=model_name, cache_dir="/tmp/flashrank")
                 logger.info("FlashRank ranker initialized successfully")
     return _ranker
 

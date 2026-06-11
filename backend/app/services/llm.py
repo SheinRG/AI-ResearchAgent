@@ -33,6 +33,8 @@ class GroqClient:
         system: str = "",
         temperature: float = 0.7,
         format_json: bool = False,
+        model: Optional[str] = None,
+        max_tokens: int = 2048,
     ) -> str:
         """
         Generate a complete response from Groq.
@@ -42,6 +44,8 @@ class GroqClient:
             system: Optional system prompt.
             temperature: Sampling temperature.
             format_json: If True, request JSON formatted output.
+            model: Override the default model for this call.
+            max_tokens: Maximum tokens to generate.
 
         Returns:
             The full generated text.
@@ -52,10 +56,10 @@ class GroqClient:
         messages.append({"role": "user", "content": prompt})
 
         kwargs = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": 2048,
+            "max_tokens": max_tokens,
             "stream": False,
         }
         if format_json:
@@ -76,6 +80,8 @@ class GroqClient:
         prompt: str,
         system: str = "",
         temperature: float = 0.7,
+        model: Optional[str] = None,
+        max_tokens: int = 2048,
     ) -> AsyncGenerator[str, None]:
         """
         Stream tokens from Groq one at a time.
@@ -84,6 +90,8 @@ class GroqClient:
             prompt: The user prompt.
             system: Optional system prompt.
             temperature: Sampling temperature.
+            model: Override the default model for this call.
+            max_tokens: Maximum tokens to generate.
 
         Yields:
             Individual tokens as they're generated.
@@ -95,10 +103,10 @@ class GroqClient:
 
         try:
             stream = await self.client.chat.completions.create(
-                model=self.model,
+                model=model or self.model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=2048,
+                max_tokens=max_tokens,
                 stream=True,
             )
             async for chunk in stream:

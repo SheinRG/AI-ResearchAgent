@@ -39,6 +39,7 @@ from app.models.database import (
 from app.agents.graph import get_research_graph
 from app.services.llm import get_llm_client
 from app.services.cache import close_redis, get_redis
+from app.services.scraper import close_scraper
 from app.services.auth import (
     hash_password,
     verify_password,
@@ -82,6 +83,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    await close_scraper()
     await close_redis()
     await close_db()
     logger.info("Backend shutdown complete")
@@ -383,17 +385,19 @@ async def research(
                     "sse_callback": queue_callback,
                 }
 
-                # Run the graph
-                final_state = None
+                # Run the graph, accumulating each node's partial update into a
+                # single merged state. astream yields {node: update} per node, so
+                # keeping only the last update would drop the answer and sources
+                # (which are written by earlier nodes than the reflector).
+                accumulated: dict = {}
                 async for state in graph.astream(initial_state):
-                    # Each yield is a partial state update from a node
                     if isinstance(state, dict):
-                        for node_name, node_output in state.items():
+                        for node_output in state.values():
                             if isinstance(node_output, dict):
-                                final_state = node_output
+                                accumulated.update(node_output)
 
                 # Signal completion
-                await event_queue.put(("_final_state", final_state or {}))
+                await event_queue.put(("_final_state", accumulated))
 
             except Exception as e:
                 logger.error("Agent execution failed: %s", e)
@@ -543,9 +547,11 @@ async def _save_session(
     try:
         factory = get_session_factory()
         async with factory() as db:
-            # Create session
-            session = ResearchSession(id=session_id, user_id=user_id or None)
-            db.add(session)
+            # Create the session row only if it doesn't already exist, so a
+            # reused session_id (e.g. a follow-up) doesn't hit a PK conflict.
+            existing = await db.get(ResearchSession, session_id)
+            if existing is None:
+                db.add(ResearchSession(id=session_id, user_id=user_id or None))
 
             # Create query record
             sources = final_state.get("all_sources", final_state.get("search_results", []))

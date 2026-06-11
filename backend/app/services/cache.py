@@ -79,6 +79,40 @@ async def cache_get(prefix: str, key_data: str) -> Optional[Any]:
         return None
 
 
+async def cache_get_many(prefix: str, key_datas: list[str]) -> dict[str, Any]:
+    """
+    Batch-get multiple cached values in a single round trip via MGET.
+
+    Args:
+        prefix: Cache namespace (e.g., 'scrape').
+        key_datas: List of raw key strings to look up.
+
+    Returns:
+        Dict mapping each input key_data to its cached value (only hits included).
+    """
+    if not key_datas:
+        return {}
+
+    client = await get_redis()
+    if client is None:
+        return {}
+
+    try:
+        keys = [_cache_key(prefix, k) for k in key_datas]
+        values = await client.mget(keys)
+        hits: dict[str, Any] = {}
+        for key_data, value in zip(key_datas, values):
+            if value:
+                try:
+                    hits[key_data] = json.loads(value)
+                except json.JSONDecodeError:
+                    continue
+        return hits
+    except Exception as e:
+        logger.warning("Cache mget error: %s", e)
+        return {}
+
+
 async def cache_set(prefix: str, key_data: str, value: Any, ttl: Optional[int] = None) -> None:
     """
     Store a value in cache.

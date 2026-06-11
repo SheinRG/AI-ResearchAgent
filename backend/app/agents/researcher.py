@@ -8,7 +8,7 @@ import logging
 from app.services.search import search_web
 from app.services.scraper import scrape_urls
 from app.services.reranker import rerank_chunks
-from app.services.cache import cache_get, cache_set
+from app.services.cache import cache_get, cache_get_many, cache_set
 from app.utils.chunker import chunk_text
 from app.agents.state import ResearchState
 from app.config import get_settings
@@ -104,10 +104,11 @@ async def researcher_node(state: ResearchState) -> dict:
     scraped_content = []
     urls_to_scrape = all_urls_to_scrape[:settings.scrape_top_n * len(sub_queries)]
 
-    # Check cache for scraped content
+    # Check cache for scraped content in a single batched round trip
+    cached_map = await cache_get_many("scrape", urls_to_scrape)
     uncached_urls = []
     for url in urls_to_scrape:
-        cached = await cache_get("scrape", url)
+        cached = cached_map.get(url)
         if cached:
             scraped_content.append(cached)
         else:
