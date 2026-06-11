@@ -41,7 +41,7 @@ def chunk_text(
     separators = ["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " "]
     chunks = _recursive_split(text, separators, chunk_size, chunk_overlap)
 
-    # Filter out very short chunks
+    # Drop very short chunks (under 30 chars) to avoid noise
     chunks = [c.strip() for c in chunks if len(c.strip()) > 30]
 
     logger.debug("Chunked %d chars → %d chunks (size=%d, overlap=%d)",
