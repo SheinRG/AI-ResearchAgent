@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Pattern to match citation markers like [1], [2], [3]
 CITATION_PATTERN = re.compile(r'\[(\d+)\]')
+MAX_CLAIM_LENGTH = 300
 
 
 def extract_citations(
@@ -108,7 +109,7 @@ def _extract_claim_context(text: str, citation_idx: int) -> str:
     # Remove all citation markers from the claim text to keep it clean
     claim = re.sub(r'\[\d+\]', '', claim).strip()
 
-    return claim[:300]  # Limit claim length to 300 characters to keep citations concise
+    return claim[:MAX_CLAIM_LENGTH]
 
 
 def format_sources_for_prompt(sources: list[SearchResult]) -> str:
