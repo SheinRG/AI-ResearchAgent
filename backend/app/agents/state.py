@@ -72,8 +72,8 @@ class ResearchState(TypedDict, total=False):
     confidence: float                                   # Confidence score (0-1)
 
     # --- Control ---
-    iteration: int                                      # Current loop count
-    phase: str                                          # Current phase for UI
+    iteration: int                                      # Current reflection loop count
+    phase: str                                          # Current agent phase (used by UI)
     follow_up_suggestions: list[str]                    # Generated follow-up questions
     error: str                                          # Error message if any
 
