@@ -33,7 +33,7 @@ async def get_redis() -> Optional[aioredis.Redis]:
                 settings.redis_url,
                 encoding="utf-8",
                 decode_responses=True,
-                socket_connect_timeout=5,
+                socket_connect_timeout=5,  # seconds
             )
             await _redis_client.ping()
             logger.info("Redis connected at %s", settings.redis_url)
