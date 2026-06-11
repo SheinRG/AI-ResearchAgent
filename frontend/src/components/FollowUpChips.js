@@ -16,7 +16,7 @@ export default function FollowUpChips({ suggestions = [] }) {
 
   return (
     <div className="followup-section">
-      <div className="followup-label">Related Questions</div>
+      <div className="followup-label">Related</div>
       <div className="followup-chips">
         <AnimatePresence>
           {suggestions.map((suggestion, index) => (

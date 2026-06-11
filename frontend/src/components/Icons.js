@@ -1,7 +1,9 @@
 /**
- * Aurora icon set — 20px line-art SVG icons (1.5px stroke).
- * Replaces emoji per design system: minimal, consistent, accessible.
+ * Icon set — 20px line-art SVG icons (1.5px stroke).
+ * Minimal, consistent, accessible (no emoji-as-icons).
  */
+
+import { useId } from "react";
 
 const base = {
   width: 20,
@@ -15,20 +17,33 @@ const base = {
   "aria-hidden": true,
 };
 
-export const LogoMark = ({ size = 28 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-    <defs>
-      <linearGradient id="aurora-grad" x1="0" y1="0" x2="24" y2="24">
-        <stop offset="0%" stopColor="#00dce5" />
-        <stop offset="55%" stopColor="#9e57dd" />
-        <stop offset="100%" stopColor="#00ffc2" />
-      </linearGradient>
-    </defs>
-    <circle cx="12" cy="12" r="3" fill="url(#aurora-grad)" />
-    <circle cx="12" cy="12" r="7.5" stroke="url(#aurora-grad)" strokeWidth="1.2" opacity="0.55" />
-    <circle cx="12" cy="12" r="11" stroke="url(#aurora-grad)" strokeWidth="1" opacity="0.25" />
-  </svg>
-);
+export const LogoMark = ({ size = 28 }) => {
+  // Unique gradient id per instance: a shared id resolves to the first DOM
+  // match, which may sit inside a display:none container (e.g. the hidden
+  // mobile header) and silently break the fill.
+  const id = useId();
+  const gradId = `brand-grad-${id.replace(/[^a-zA-Z0-9-]/g, "")}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="24" y2="24">
+          <stop offset="0%" stopColor="#30d2bd" />
+          <stop offset="100%" stopColor="#0f8d7c" />
+        </linearGradient>
+      </defs>
+      {/* rounded-square tile with an open ring — search/focus motif */}
+      <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill={`url(#${gradId})`} />
+      <path
+        d="M16.5 12a4.5 4.5 0 1 1-4.5-4.5"
+        stroke="#07221e"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <circle cx="16.5" cy="7.5" r="1.4" fill="#07221e" />
+    </svg>
+  );
+};
 
 export const SearchIcon = (props) => (
   <svg {...base} {...props}>

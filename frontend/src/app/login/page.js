@@ -97,7 +97,7 @@ export default function LoginPage() {
             <LogoMark size={24} />
           </span>
           <span className="brand-text">
-            aura<span className="wordmark-accent">.ai</span>
+            goon<span className="wordmark-accent">.ai</span>
           </span>
         </a>
         <div className="navbar-actions">

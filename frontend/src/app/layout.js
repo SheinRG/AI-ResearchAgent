@@ -4,9 +4,9 @@ import { AuthProvider } from "@/components/AuthProvider";
 import AppLayout from "@/components/AppLayout";
 
 export const metadata = {
-  title: "Aura — Illuminated Intelligence",
+  title: "goon.ai — Research, with receipts",
   description:
-    "An autonomous AI research agent that searches the web, analyzes sources, and delivers comprehensive cited answers.",
+    "An autonomous AI research agent that searches the web, analyzes sources, and delivers comprehensive answers with verifiable citations.",
   keywords: ["AI research", "search agent", "cited answers", "deep research"],
 };
 

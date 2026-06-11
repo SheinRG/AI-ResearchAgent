@@ -14,23 +14,11 @@ import {
   ClockIcon,
 } from "@/components/Icons";
 
-const QUICK_ACTIONS = [
-  {
-    icon: AtomIcon,
-    label: "Latest breakthroughs in quantum computing",
-  },
-  {
-    icon: DnaIcon,
-    label: "How does mRNA vaccine technology work?",
-  },
-  {
-    icon: TrendingIcon,
-    label: "Compare the top AI chip makers in 2026",
-  },
-  {
-    icon: CodeIcon,
-    label: "Explain transformer architecture in AI",
-  },
+const SUGGESTIONS = [
+  { icon: AtomIcon, label: "Breakthroughs in quantum computing" },
+  { icon: DnaIcon, label: "How mRNA vaccine technology works" },
+  { icon: TrendingIcon, label: "Top AI chip makers compared" },
+  { icon: CodeIcon, label: "Transformer architecture, explained" },
 ];
 
 export default function HomePage() {
@@ -68,49 +56,40 @@ export default function HomePage() {
       <div className="hero">
         <motion.h1
           className="hero-wordmark"
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.1 }}
+          transition={{ duration: 0.5, delay: 0.05 }}
         >
-          aura<span className="wordmark-accent">.ai</span>
+          goon<span className="wordmark-accent">.ai</span>
         </motion.h1>
 
         <motion.p
           className="hero-subtitle"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.25 }}
+          transition={{ duration: 0.45, delay: 0.2 }}
         >
-          Deep, cited research on anything. Ask and watch the answer assemble
-          itself.
+          Research, with receipts. Every answer backed by sources you can check.
         </motion.p>
 
         <SearchBar onSearch={handleSearch} mode="large" />
 
         <motion.div
-          className="quick-panel"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.45 }}
+          className="suggestion-row"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.45, delay: 0.4 }}
         >
-          <div className="quick-panel-label">Try deep research</div>
-          <div className="quick-grid">
-            {QUICK_ACTIONS.map(({ icon: Icon, label }, i) => (
-              <motion.button
-                key={label}
-                className="quick-card"
-                onClick={() => handleSearch(label)}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.55 + i * 0.07 }}
-              >
-                <span className="quick-card-icon">
-                  <Icon width={18} height={18} />
-                </span>
-                {label}
-              </motion.button>
-            ))}
-          </div>
+          {SUGGESTIONS.map(({ icon: Icon, label }) => (
+            <button
+              key={label}
+              className="suggestion-chip"
+              onClick={() => handleSearch(label)}
+            >
+              <Icon width={15} height={15} />
+              {label}
+            </button>
+          ))}
         </motion.div>
 
         {recentSearches.length > 0 && (
@@ -118,27 +97,24 @@ export default function HomePage() {
             className="recent-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
+            transition={{ delay: 0.6 }}
           >
-            <div className="recent-label">Recent Research</div>
+            <div className="recent-label">Recent</div>
             <div className="recent-list">
-              {recentSearches.slice(0, 3).map((search, i) => (
-                <motion.a
+              {recentSearches.slice(0, 4).map((search) => (
+                <a
                   key={search.timestamp}
                   className="recent-item"
                   onClick={() => handleSearch(search.query)}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.9 + i * 0.05 }}
                 >
                   <span className="recent-item-icon">
-                    <ClockIcon width={16} height={16} />
+                    <ClockIcon width={15} height={15} />
                   </span>
                   <span className="recent-item-text">{search.query}</span>
                   <span className="recent-item-time">
                     {formatTime(search.timestamp)}
                   </span>
-                </motion.a>
+                </a>
               ))}
             </div>
           </motion.div>

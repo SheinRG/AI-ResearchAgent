@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CitationTooltip from "./CitationTooltip";
+import { SparklesIcon } from "@/components/Icons";
 
 export default function StreamingAnswer({ answer = "", isStreaming = false, sources = [] }) {
   const [hoveredCitation, setHoveredCitation] = useState(null);
@@ -31,6 +32,10 @@ export default function StreamingAnswer({ answer = "", isStreaming = false, sour
 
   return (
     <div className="answer-section">
+      <div className="answer-header">
+        <SparklesIcon width={16} height={16} />
+        Answer
+      </div>
       <div className="answer-container">
         <div className="answer-content">
           <ReactMarkdown

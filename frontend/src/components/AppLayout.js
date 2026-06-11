@@ -70,7 +70,7 @@ export default function AppLayout({ children }) {
             <LogoMark size={24} />
           </span>
           <span className="brand-text">
-            aura<span className="wordmark-accent">.ai</span>
+            goon<span className="wordmark-accent">.ai</span>
           </span>
         </a>
         <div style={{ marginLeft: "auto" }}>
@@ -86,7 +86,7 @@ export default function AppLayout({ children }) {
               <LogoMark size={26} />
             </span>
             <span className="brand-text">
-              aura<span className="wordmark-accent">.ai</span>
+              goon<span className="wordmark-accent">.ai</span>
             </span>
           </a>
           <button

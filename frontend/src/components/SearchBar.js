@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion } from "motion/react";
-import { SearchIcon, ArrowUpIcon } from "@/components/Icons";
+import { ArrowUpIcon, SparklesIcon } from "@/components/Icons";
 
 const PLACEHOLDERS = [
   "Ask anything...",
@@ -39,25 +39,24 @@ export default function SearchBar({ onSearch, mode = "large", disabled = false }
     }
   };
 
+  const isLarge = mode === "large";
+
   return (
     <motion.div
       className="search-container"
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.2 }}
+      transition={{ duration: 0.45, delay: 0.15 }}
     >
       <form
         onSubmit={handleSubmit}
-        className={`search-bar ${mode === "large" ? "search-bar-large" : "search-bar-compact"}`}
+        className={`ask-box ${isLarge ? "" : "ask-box-compact"}`}
       >
-        <span className="search-leading-icon">
-          <SearchIcon width={18} height={18} />
-        </span>
         <input
           ref={inputRef}
           id="search-input"
           type="text"
-          className="search-input"
+          className="ask-input"
           placeholder={PLACEHOLDERS[placeholderIdx]}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -66,15 +65,31 @@ export default function SearchBar({ onSearch, mode = "large", disabled = false }
           autoComplete="off"
           aria-label="Research question"
         />
-        <motion.button
-          type="submit"
-          className="search-submit"
-          disabled={!query.trim() || disabled}
-          whileTap={{ scale: 0.94 }}
-          aria-label="Start research"
-        >
-          <ArrowUpIcon width={18} height={18} />
-        </motion.button>
+        {isLarge ? (
+          <div className="ask-toolbar">
+            <span className="ask-badge" title="Multi-step research with cited sources">
+              <SparklesIcon width={13} height={13} />
+              deep research
+            </span>
+            <button
+              type="submit"
+              className="ask-submit"
+              disabled={!query.trim() || disabled}
+              aria-label="Start research"
+            >
+              <ArrowUpIcon width={17} height={17} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="submit"
+            className="ask-submit"
+            disabled={!query.trim() || disabled}
+            aria-label="Start research"
+          >
+            <ArrowUpIcon width={16} height={16} />
+          </button>
+        )}
       </form>
     </motion.div>
   );
