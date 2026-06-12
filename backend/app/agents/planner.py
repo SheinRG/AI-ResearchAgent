@@ -1,7 +1,7 @@
 """
 Planner Node — Query Decomposition.
 Takes the user's question and generates 2-4 focused sub-queries
-using Ollama's structured JSON output.
+using Groq's structured JSON output.
 """
 
 import logging

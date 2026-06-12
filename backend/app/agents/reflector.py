@@ -4,7 +4,7 @@ Evaluates the draft answer for completeness, identifies gaps,
 and decides whether to loop back to the planner or finalize.
 
 Generates follow-up suggestions in the SAME LLM call to avoid
-an extra round-trip to Ollama.
+an extra round-trip to Groq.
 """
 
 import logging

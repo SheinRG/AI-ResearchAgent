@@ -109,7 +109,7 @@ function ResearchContent() {
               <div className="error-message">{error}</div>
               <button
                 className="error-retry"
-                onClick={() => startResearch(query)}
+                onClick={() => startResearch(query, 1, token)}
               >
                 Try Again
               </button>

@@ -2,9 +2,10 @@
 Pydantic models for request/response validation and data transfer.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 import uuid
+import re
 
 
 # --- Auth Schemas ---
@@ -12,8 +13,20 @@ import uuid
 class RegisterRequest(BaseModel):
     """User registration request."""
     email: str = Field(..., description="User email")
-    password: str = Field(..., min_length=6, description="User password (min 6 chars)")
+    password: str = Field(..., min_length=8, description="User password (min 8 chars, 1 uppercase, 1 number)")
     name: str = Field(default="", description="Display name")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        """Enforce password policy: min 8 chars, at least 1 uppercase, 1 number."""
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one number")
+        return v
 
 
 class LoginRequest(BaseModel):

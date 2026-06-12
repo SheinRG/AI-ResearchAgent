@@ -1,9 +1,12 @@
 """
 Async Groq client for cloud LLM inference.
-Supports regular generation, streaming, and structured JSON output.
+Supports regular generation, streaming, and structured JSON output,
+with exponential-backoff retries on transient failures.
 """
 
 import json
+import time
+import asyncio
 import logging
 from typing import AsyncGenerator, Optional
 
@@ -14,6 +17,22 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# HTTP statuses worth retrying — transient server/throttling errors only.
+# 4xx like 400/401/404 are permanent and must NOT be retried.
+_RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Whether a Groq/httpx exception represents a transient, retryable failure."""
+    if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError)):
+        return True
+    # Groq SDK errors expose .status_code; some wrap an httpx response instead.
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        resp = getattr(exc, "response", None)
+        status = getattr(resp, "status_code", None)
+    return status in _RETRYABLE_STATUS
+
 
 class GroqClient:
     """Async wrapper around the Groq Python SDK."""
@@ -22,10 +41,16 @@ class GroqClient:
         settings = get_settings()
         self.model = settings.groq_model
         self.timeout = settings.groq_timeout
+        self.max_retries = settings.groq_max_retries
+        self.retry_base_delay = settings.groq_retry_base_delay
         self.client = AsyncGroq(
             api_key=settings.groq_api_key,
             timeout=httpx.Timeout(self.timeout),
         )
+        # Short-lived health-check cache so frequent /api/health polls from a
+        # load balancer don't hammer Groq's models endpoint.
+        self._health_cache: Optional[bool] = None
+        self._health_cache_at: float = 0.0
 
     async def generate(
         self,
@@ -65,15 +90,21 @@ class GroqClient:
         if format_json:
             kwargs["response_format"] = {"type": "json_object"}
 
-        try:
-            response = await self.client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content or ""
-        except httpx.TimeoutException:
-            logger.error("Groq request timed out after %ds", self.timeout)
-            raise
-        except Exception as e:
-            logger.error("Groq request failed: %s", e)
-            raise
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self.client.chat.completions.create(**kwargs)
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                if attempt < self.max_retries and _is_retryable(e):
+                    delay = self.retry_base_delay * (2 ** attempt)
+                    logger.warning(
+                        "Groq generate attempt %d/%d failed (%s); retrying in %.1fs",
+                        attempt + 1, self.max_retries + 1, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("Groq request failed: %s", e)
+                raise
 
     async def generate_stream(
         self,
@@ -101,23 +132,38 @@ class GroqClient:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
+        # Retry only while establishing the stream. Once tokens have started
+        # flowing we can't safely restart without duplicating output.
+        stream = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                stream = await self.client.chat.completions.create(
+                    model=model or self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                )
+                break
+            except Exception as e:
+                if attempt < self.max_retries and _is_retryable(e):
+                    delay = self.retry_base_delay * (2 ** attempt)
+                    logger.warning(
+                        "Groq stream setup attempt %d/%d failed (%s); retrying in %.1fs",
+                        attempt + 1, self.max_retries + 1, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("Groq stream failed: %s", e)
+                raise
+
         try:
-            stream = await self.client.chat.completions.create(
-                model=model or self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
             async for chunk in stream:
                 token = chunk.choices[0].delta.content
                 if token:
                     yield token
-        except httpx.TimeoutException:
-            logger.error("Groq stream timed out after %ds", self.timeout)
-            raise
         except Exception as e:
-            logger.error("Groq stream failed: %s", e)
+            logger.error("Groq stream interrupted mid-flight: %s", e)
             raise
 
     async def generate_structured(
@@ -159,8 +205,17 @@ class GroqClient:
             logger.error("Could not parse structured output: %s", raw[:200])
             return {}
 
-    async def health_check(self) -> bool:
-        """Check if Groq API is reachable and responding."""
+    async def health_check(self, ttl: int = 30) -> bool:
+        """
+        Check if Groq API is reachable and responding.
+
+        Caches the result for ``ttl`` seconds so repeated health polls don't
+        burn Groq rate limit on the models endpoint.
+        """
+        now = time.monotonic()
+        if self._health_cache is not None and (now - self._health_cache_at) < ttl:
+            return self._health_cache
+
         try:
             models = await self.client.models.list()
             available = any(m.id == self.model for m in models.data)
@@ -171,10 +226,13 @@ class GroqClient:
                     self.model,
                     model_ids,
                 )
-            return True
+            self._health_cache = True
         except Exception as e:
             logger.error("Groq health check failed: %s", e)
-            return False
+            self._health_cache = False
+
+        self._health_cache_at = now
+        return self._health_cache
 
 
 # Singleton instance

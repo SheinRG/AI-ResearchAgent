@@ -71,6 +71,25 @@ async def synthesizer_node(state: ResearchState) -> dict:
     if not cited_sources and search_results:
         cited_sources = search_results[: settings.max_cited_sources]
 
+    # No usable sources at all — return a clear message rather than asking the
+    # model to answer from nothing (which invites hallucination).
+    if not cited_sources:
+        logger.warning("Synthesizer: no sources available, returning fallback message")
+        message = (
+            "I couldn't find reliable sources to answer this question. "
+            "This can happen with very new, niche, or ambiguous topics — "
+            "try rephrasing the question or making it more specific."
+        )
+        if sse_callback:
+            await sse_callback("phase", {"phase": "writing", "message": "Synthesizing your answer..."})
+            await sse_callback("token", {"token": message})
+        return {
+            "draft_answer": message,
+            "citations": [],
+            "all_sources": [],
+            "phase": "writing",
+        }
+
     # Phase: Writing
     if sse_callback:
         await sse_callback("phase", {

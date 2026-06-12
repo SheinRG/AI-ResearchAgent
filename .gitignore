@@ -1,12 +1,13 @@
 # ===== Secrets / Environment =====
 .env
 .env.*
-!.env.example
 backend/.env
 backend/.env.*
-!backend/.env.example
 **/.env
 **/.env.local
+# ...but always keep the example templates (any directory)
+!.env.example
+!**/.env.example
 
 # ===== Python (backend) =====
 __pycache__/

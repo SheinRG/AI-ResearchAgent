@@ -4,6 +4,16 @@ import { useState, useCallback, useRef } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Dev-only: when the backend is unreachable on localhost, stream a simulated
+// answer so the UI can be developed offline. MUST stay gated to development —
+// in production this would show fabricated "research" with fake sources.
+const IS_DEV = process.env.NODE_ENV === "development";
+
+const isNetworkError = (error) =>
+  error.message?.includes("fetch") ||
+  error.message?.includes("Failed") ||
+  error.message?.includes("NetworkError");
+
 /**
  * Custom hook for SSE-based research.
  * Posts to /api/research, parses streaming SSE events for
@@ -186,7 +196,21 @@ In conclusion, scaling **${query}** remains a top priority for teams looking to 
       });
 
       if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
+        // Surface a friendly, specific message for known statuses.
+        let detail = "";
+        try {
+          const body = await response.json();
+          detail = body?.detail || "";
+        } catch {
+          // non-JSON body; ignore
+        }
+        if (response.status === 401) {
+          throw new Error("Your session has expired. Please log in again.");
+        }
+        if (response.status === 429) {
+          throw new Error(detail || "You've hit the hourly query limit. Please try again later.");
+        }
+        throw new Error(detail || `The server responded with an error (${response.status}).`);
       }
 
       const reader = response.body.getReader();
@@ -221,9 +245,11 @@ In conclusion, scaling **${query}** remains a top priority for teams looking to 
       }
     } catch (err) {
       if (err.name !== "AbortError") {
-        if (err.message.includes("fetch") || err.message.includes("failed") || err.message.includes("NetworkError")) {
-          console.warn("Backend offline. Simulating research streaming in Dev Mode.");
+        if (IS_DEV && isNetworkError(err)) {
+          console.warn("[dev] Backend offline — simulating research stream.");
           await runSimulation(query, controller.signal);
+        } else if (isNetworkError(err)) {
+          setError("Can't reach the research server. Please try again shortly.");
         } else {
           console.error("Research error:", err);
           setError(err.message || "An unexpected error occurred");

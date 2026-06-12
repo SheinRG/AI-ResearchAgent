@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     groq_synth_model: str = "llama-3.3-70b-versatile"
     groq_timeout: int = 60  # seconds
     synth_max_tokens: int = 3072  # max answer length for the synthesizer
+    # Transient-failure retries (429/5xx/timeouts) before giving up on a call.
+    groq_max_retries: int = 2
+    groq_retry_base_delay: float = 0.8  # seconds, doubled each retry
 
     # --- Serper (Search API) ---
     serper_api_key: str = ""

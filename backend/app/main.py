@@ -5,14 +5,14 @@ Main entry point for the AI Research Agent backend.
 
 import json
 import uuid
+import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from app.config import get_settings
@@ -21,7 +21,6 @@ from app.models.schemas import (
     SessionResponse,
     SessionListItem,
     SearchResult,
-    DoneEvent,
     RegisterRequest,
     LoginRequest,
     GoogleAuthRequest,
@@ -30,7 +29,6 @@ from app.models.schemas import (
 from app.models.database import (
     init_db,
     close_db,
-    get_db,
     ResearchSession,
     ResearchQuery,
     User,
@@ -61,6 +59,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown events."""
     logger.info("Starting AI Research Agent backend...")
+
+    # Security guard: refuse to start silently with the default JWT secret.
+    startup_settings = get_settings()
+    if startup_settings.auth_secret.startswith("change-me"):
+        logger.warning(
+            "=" * 70 + "\n"
+            "  SECURITY WARNING: AUTH_SECRET is still the insecure default.\n"
+            "  Set a strong random AUTH_SECRET before exposing this to users:\n"
+            "    python -c \"import secrets; print(secrets.token_hex(32))\"\n"
+            + "=" * 70
+        )
 
     # Initialize database
     try:
@@ -133,19 +142,6 @@ async def get_current_user(request: Request) -> dict:
     return payload
 
 
-async def get_optional_user(request: Request) -> Optional[dict]:
-    """
-    Extract JWT if present, but don't require it.
-    Returns user payload or None.
-    """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return None
-
-    token = auth_header[7:]
-    return validate_token(token)
-
-
 # --- Rate Limiting ---
 
 async def check_rate_limit(user_id: str) -> None:
@@ -213,7 +209,7 @@ async def register(request: RegisterRequest):
         existing = result.scalar_one_or_none()
 
         if existing:
-            raise HTTPException(status_code=409, detail="Email already registered")
+            raise HTTPException(status_code=409, detail="Registration failed. Please try again or log in.")
 
         # Create user
         user = User(
@@ -249,10 +245,10 @@ async def login(request: LoginRequest):
         user = result.scalar_one_or_none()
 
         if not user or not user.password_hash:
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
         if not verify_password(request.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
         token = create_token(user.id, user.email, user.name)
 
@@ -355,7 +351,6 @@ async def research(
         """Generate SSE events from the research agent."""
         session_id = request.session_id or str(uuid.uuid4())
 
-        import asyncio
         event_queue: asyncio.Queue = asyncio.Queue()
 
         async def queue_callback(event_type: str, data: dict):

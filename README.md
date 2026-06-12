@@ -1,39 +1,41 @@
-# 🔬 AI Research Agent
+# 🔬 goon.ai — AI Research Agent
 
-> A Perplexity AI clone — autonomous research agent that searches the web, reads sources, and delivers comprehensive cited answers. **100% free, 100% local, zero API keys.**
+> An autonomous research agent that decomposes a question, searches the web, reads and ranks sources, and streams back a comprehensive answer with verifiable `[1]`-style citations — a Perplexity-style experience built on an agentic LangGraph pipeline.
 
 ## ✨ Features
 
-- **🤖 Agentic Research Loop** — Decomposes questions → parallel web search → scrape & rank → synthesize cited answers → reflect & refine
-- **🔍 Web Search** — DuckDuckGo search (no API key needed)
-- **📖 Smart Extraction** — Trafilatura for gold-standard content extraction
-- **⚡ Re-ranking** — FlashRank CPU-only neural re-ranker
-- **📝 Cited Answers** — Markdown answers with clickable [1], [2] citation badges
-- **🎯 Self-Reflection** — Confidence scoring + gap analysis with automatic refinement loops
-- **🌊 Real-time Streaming** — SSE-based token streaming for live answer generation
-- **🎨 Premium UI** — Glassmorphism, animations, dark/light mode
-- **💾 Session History** — PostgreSQL persistence + Redis caching
-- **🏠 100% Local** — Ollama LLM runs on your machine, no data leaves your network
+- **🤖 Agentic research loop** — Plan → parallel search → scrape & re-rank → synthesize cited answer → reflect & (optionally) refine, orchestrated as a LangGraph state machine
+- **🧠 Two-tier LLM strategy** — a fast model for planning/reflection, a stronger model for the final synthesized answer
+- **🔍 Web search** — Serper (Google) API for fast, high-quality results with per-domain diversity
+- **📖 Content extraction** — Trafilatura pulls clean article text from scraped pages
+- **⚡ Neural re-ranking** — FlashRank (CPU-only) ranks chunks by relevance to the query
+- **📝 Trustworthy citations** — a single canonical, relevance-ordered source list drives the prompt, the `[n]` markers, and the UI, so every citation points at exactly the source the model read
+- **🎯 Self-reflection** — confidence scoring + gap analysis, with an optional refine loop
+- **🌊 Real-time streaming** — SSE token streaming for live answer generation
+- **🔐 Auth** — email/password (bcrypt) + Google OAuth, stateless JWT, per-user rate limiting
+- **💾 Persistence** — PostgreSQL for sessions/history, Redis for search & scrape caching
 
 ## 🏗️ Architecture
 
 ```
-User Query → Planner (LLM) → 2-4 Sub-queries
-  → Parallel Researchers (Search → Scrape → Chunk → Rerank)
-    → Synthesizer (LLM, streaming) → Cited Answer
-      → Reflector (LLM) → Loop or Finalize
+User Query
+  → Planner (fast LLM)        decomposes into 2–4 sub-queries
+  → Researcher (parallel)     search → scrape → chunk  (Redis-cached)
+  → Re-ranker (FlashRank)     rank chunks; build canonical source list
+  → Synthesizer (strong LLM)  stream a cited Markdown answer
+  → Reflector (fast LLM)      confidence + gaps + follow-ups → loop or finish
 ```
 
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | Next.js 15, Vanilla CSS, Motion, Zustand |
+| **Frontend** | Next.js 16, React 19, Vanilla CSS, Motion, Zustand |
 | **Backend** | Python 3.12, FastAPI, LangGraph |
-| **LLM** | Ollama (Llama 3.1 8B) |
-| **Search** | DuckDuckGo (no API key) |
+| **LLM** | Groq Cloud — `llama-3.1-8b-instant` (plan/reflect) + `llama-3.3-70b-versatile` (synthesis) |
+| **Search** | Serper (Google Search API) |
 | **Extraction** | Trafilatura |
-| **Re-ranking** | FlashRank (CPU-only) |
+| **Re-ranking** | FlashRank (CPU-only, `ms-marco-MiniLM-L-12-v2`) |
 | **Database** | PostgreSQL 16 |
 | **Cache** | Redis 7 |
 | **Infrastructure** | Docker Compose |
@@ -43,30 +45,38 @@ User Query → Planner (LLM) → 2-4 Sub-queries
 ### Prerequisites
 
 1. **Docker Desktop** — [Install Docker](https://docs.docker.com/desktop/)
-2. **Ollama** — [Install Ollama](https://ollama.com)
-3. **Node.js 20+** — [Install Node.js](https://nodejs.org)
+2. **Node.js 20+** — only needed if running the frontend outside Docker
+3. **API keys** (both have free tiers):
+   - **Groq** — https://console.groq.com
+   - **Serper** — https://serper.dev
 
 ### Setup
 
 ```bash
-# 1. Clone the repo
+# 1. Clone
 git clone <your-repo-url>
-cd ai-research-agent
+cd perplexity
 
-# 2. Pull the Ollama model
-ollama pull llama3.1:8b
+# 2. Configure environment
+cp backend/.env.example backend/.env     # then fill in GROQ_API_KEY, SERPER_API_KEY, AUTH_SECRET
+cp frontend/.env.example frontend/.env
 
-# 3. Verify Ollama is running
-curl http://localhost:11434/api/tags
+# Generate a strong AUTH_SECRET:
+#   python -c "import secrets; print(secrets.token_hex(32))"
 
-# 4. Start infrastructure (Redis + Postgres + Backend)
-docker compose up -d
+# 3. Bring up the whole stack (Postgres + Redis + Backend + Frontend)
+docker compose up -d --build
+```
 
-# 5. Install frontend dependencies
+> `docker compose` reads variables from a root `.env` file. Set at least
+> `GROQ_API_KEY`, `SERPER_API_KEY`, and `AUTH_SECRET` there (or export them)
+> before starting.
+
+To run the frontend separately for development:
+
+```bash
 cd frontend
 npm install
-
-# 6. Start the frontend
 npm run dev
 ```
 
@@ -79,59 +89,70 @@ npm run dev
 
 ## 📡 API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/research` | Start research (SSE stream) |
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/sessions` | List recent sessions |
-| `GET` | `/api/sessions/{id}` | Get session details |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/auth/register` | — | Register (email/password) |
+| `POST` | `/api/auth/login` | — | Log in |
+| `POST` | `/api/auth/google` | — | Google OAuth |
+| `GET`  | `/api/auth/me` | ✅ | Current user |
+| `POST` | `/api/research` | ✅ | Start research (SSE stream) |
+| `GET`  | `/api/sessions` | ✅ | List recent sessions |
+| `GET`  | `/api/sessions/{id}` | ✅ | Get session details |
+| `GET`  | `/api/health` | — | Health check |
 
 ### SSE Events
 
 ```
 event: phase        → {"phase": "planning", "message": "Breaking down..."}
 event: sub_queries  → {"queries": ["q1", "q2", "q3"]}
-event: sources      → {"sources": [{url, title, domain, favicon, snippet}]}
+event: sources      → {"sources": [{url, title, domain, favicon, snippet}], "replace": true}
 event: token        → {"token": "word"}
 event: follow_up    → {"suggestions": ["question1", "question2"]}
-event: done         → {"session_id": "...", "confidence": 0.89}
+event: done         → {"session_id": "...", "total_sources": 8, "confidence": 0.89}
 ```
 
 ## 🔧 Configuration
 
-Copy `.env.example` to `.env` and adjust the variables:
+Backend variables (see `backend/.env.example`):
 
 | Variable | Description | Default / Example |
 |----------|-------------|-------------------|
-| `GROQ_API_KEY` | API key for Groq Cloud LLM | `your-groq-api-key-here` |
-| `GROQ_MODEL` | Groq LLM model identifier | `llama-3.1-8b-instant` |
-| `SERPER_API_KEY` | API key for Serper search API | `your-serper-api-key-here` |
+| `GROQ_API_KEY` | Groq Cloud API key (**required**) | `gsk_...` |
+| `GROQ_MODEL` | Fast model for planning/reflection | `llama-3.1-8b-instant` |
+| `GROQ_SYNTH_MODEL` | Strong model for synthesis | `llama-3.3-70b-versatile` |
+| `SERPER_API_KEY` | Serper search API key (**required**) | `...` |
+| `AUTH_SECRET` | JWT signing secret (**set a random value**) | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID (optional) | `...apps.googleusercontent.com` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://agent:agent@postgres:5432/research_agent` |
 | `REDIS_URL` | Redis connection URL | `redis://redis:6379/0` |
-| `AUTH_SECRET` | Secret key used for session authentication | `change-me-in-production-use-a-random-string` |
-| `GOOGLE_CLIENT_ID` | Client ID for Google OAuth integration | `your-google-client-id-here` |
-| `OLLAMA_MODEL` | Ollama model override (for local model setups) | `llama3.2:3b` |
+| `RATE_LIMIT_PER_HOUR` | Research queries per user per hour | `30` |
 
+Frontend variables (see `frontend/.env.example`) — note these are inlined at **build** time:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_API_URL` | Base URL of the backend | `http://localhost:8000` |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth client ID (optional) | — |
 
 ## 📁 Project Structure
 
 ```
 ├── backend/
 │   ├── app/
-│   │   ├── agents/       # LangGraph nodes (planner, researcher, synthesizer, reflector)
-│   │   ├── services/     # Ollama, DuckDuckGo, Trafilatura, FlashRank, Redis
+│   │   ├── agents/       # LangGraph nodes (planner, researcher, synthesizer, reflector) + graph wiring
+│   │   ├── services/     # Groq LLM, Serper search, Trafilatura scraper, FlashRank, Redis, auth
 │   │   ├── models/       # Pydantic schemas, SQLAlchemy models
 │   │   ├── utils/        # Text chunking, citation extraction
-│   │   └── main.py       # FastAPI app with SSE endpoints
+│   │   └── main.py       # FastAPI app: auth, rate limiting, SSE research endpoint
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
 │   └── src/
-│       ├── app/          # Next.js pages (home, research)
+│       ├── app/          # Next.js pages (home, research, login)
 │       ├── components/   # SearchBar, SourceCards, StreamingAnswer, etc.
-│       ├── hooks/        # useResearch (SSE hook)
+│       ├── hooks/        # useResearch (SSE), useAuth
 │       └── stores/       # Zustand (recent searches)
-├── docker-compose.yml    # Redis + Postgres + Backend
+├── docker-compose.yml    # Postgres + Redis + Backend + Frontend
 └── README.md
 ```
 
