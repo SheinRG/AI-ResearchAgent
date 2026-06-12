@@ -143,9 +143,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     clearAuth();
-  };
+  }, [clearAuth]);
 
   const value = {
     user,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -20,6 +21,7 @@ const isNetworkError = (error) =>
  * phase updates, sources, tokens, follow-ups, and done signals.
  */
 export default function useResearch() {
+  const { logout } = useAuth();
   const [phase, setPhase] = useState(null);
   const [phaseMessage, setPhaseMessage] = useState("");
   const [subQueries, setSubQueries] = useState([]);
@@ -205,7 +207,12 @@ In conclusion, scaling **${query}** remains a top priority for teams looking to 
           // non-JSON body; ignore
         }
         if (response.status === 401) {
-          throw new Error("Your session has expired. Please log in again.");
+          // Invalid/expired/stale token (e.g. a leftover dev-mock token).
+          // Clear the session and bounce to login so the user can get a
+          // fresh, valid token instead of looping on the same 401.
+          setError("Your session has expired. Please sign in again.");
+          logout();
+          return;
         }
         if (response.status === 429) {
           throw new Error(detail || "You've hit the hourly query limit. Please try again later.");
@@ -258,7 +265,7 @@ In conclusion, scaling **${query}** remains a top priority for teams looking to 
     } finally {
       setIsStreaming(false);
     }
-  }, [handleEvent, runSimulation]);
+  }, [handleEvent, runSimulation, logout]);
 
   const stopResearch = useCallback(() => {
     if (abortRef.current) {
