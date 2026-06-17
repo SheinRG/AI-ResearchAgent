@@ -20,6 +20,7 @@ function ResearchContent() {
     phase,
     phaseMessage,
     sources,
+    images,
     answer,
     isStreaming,
     error,
@@ -54,6 +55,7 @@ function ResearchContent() {
         query: turn.query,
         answer: turn.answer,
         sources: turn.sources,
+        images: turn.images,
         followUps: turn.followUps,
         doneData: turn.doneData,
       },
@@ -113,6 +115,7 @@ function ResearchContent() {
             key={turn.id}
             query={turn.query}
             sources={turn.sources}
+            images={turn.images}
             answer={turn.answer}
             isStreaming={false}
             doneData={turn.doneData}
@@ -126,6 +129,7 @@ function ResearchContent() {
             <ResearchTurn
               query={activeQuery}
               sources={sources}
+              images={images}
               answer={answer}
               isStreaming={isStreaming}
               isLive

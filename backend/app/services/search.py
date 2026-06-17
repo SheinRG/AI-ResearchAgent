@@ -15,6 +15,7 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 SERPER_ENDPOINT = "https://google.serper.dev/search"
+SERPER_IMAGES_ENDPOINT = "https://google.serper.dev/images"
 
 _client: Optional[httpx.AsyncClient] = None
 
@@ -104,4 +105,76 @@ async def search_web(
         return []
     except Exception as e:
         logger.error("Serper search failed for '%s': %s", query, e)
+        return []
+
+
+async def search_images(query: str, max_results: int = 10) -> list[dict]:
+    """
+    Search for images using the Serper.dev Google Images API.
+
+    Best-effort and resilient: any timeout, HTTP error, or unexpected failure
+    returns an empty list so an image lookup can never break a research run.
+
+    Args:
+        query: The search query string.
+        max_results: Maximum number of image results to return.
+
+    Returns:
+        List of dicts shaped as
+        {url, thumbnail, title, source, domain}. Empty on any failure.
+    """
+    settings = get_settings()
+
+    headers = {
+        "X-API-KEY": settings.serper_api_key,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "q": query,
+        "num": max_results,
+    }
+
+    try:
+        client = _get_client()
+        response = await client.post(
+            SERPER_IMAGES_ENDPOINT,
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        raw_images = data.get("images", [])
+        images: list[dict] = []
+
+        for item in raw_images:
+            image_url = item.get("imageUrl", "")
+            if not image_url:
+                continue
+
+            # The originating page the image was found on.
+            source = item.get("link", "")
+            domain = item.get("domain", "")
+            if not domain and source:
+                domain = urlparse(source).netloc.replace("www.", "")
+
+            images.append({
+                "url": image_url,
+                "thumbnail": item.get("thumbnailUrl", "") or image_url,
+                "title": item.get("title", ""),
+                "source": source,
+                "domain": domain,
+            })
+
+        logger.info("Serper image search for '%s': %d results", query, len(images))
+        return images
+
+    except httpx.TimeoutException:
+        logger.error("Serper image search timed out for '%s'", query)
+        return []
+    except httpx.HTTPStatusError as e:
+        logger.error("Serper image HTTP error for '%s': %s", query, e.response.status_code)
+        return []
+    except Exception as e:
+        logger.error("Serper image search failed for '%s': %s", query, e)
         return []

@@ -91,6 +91,7 @@ class ResearchState(TypedDict, total=False):
     search_results: Annotated[list[dict], _merge_lists] # All search results (deduplicated)
     scraped_content: Annotated[list[dict], add]         # All scraped & chunked content
     ranked_chunks: list[dict]                           # Re-ranked top chunks
+    images: list[dict]                                  # Image results for the original query (Images tab)
 
     # --- Synthesizer Output ---
     draft_answer: str                                   # Current synthesized answer

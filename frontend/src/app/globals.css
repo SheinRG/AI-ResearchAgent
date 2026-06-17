@@ -516,27 +516,30 @@ body::before {
     padding-bottom: var(--space-3xl);
 }
 
-/* Each turn is a question block followed by its full-width answer. */
+/* Each turn is a question bubble followed by its tabbed answer card. */
 .chat-turn {
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg);
+    gap: var(--space-md);
 }
 
 .chat-turn + .chat-turn {
     margin-top: var(--space-2xl);
 }
 
-/* User question — full-width block at the top of the turn. */
+/* User question — right-aligned chat bubble (a recently "sent" message). */
 .chat-question {
-    padding: 14px var(--space-md);
-    border-radius: var(--radius-lg);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-subtle);
+    margin-left: auto;
+    max-width: 75%;
+    width: fit-content;
+    padding: 10px 14px;
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+    background: var(--accent-glow);
+    border: 1px solid var(--border-accent);
     color: var(--text-primary);
-    font-size: 1.05rem;
+    font-size: 0.98rem;
     font-weight: 500;
-    line-height: 1.6;
+    line-height: 1.5;
     letter-spacing: -0.01em;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -546,6 +549,209 @@ body::before {
    tables/code from stretching the column. */
 .chat-answer {
     min-width: 0;
+}
+
+/* --- Answer / Sources / Images tabs --- */
+.research-tabs {
+    min-width: 0;
+}
+
+.tab-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-lg);
+}
+
+.tab-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 2px;
+    background: transparent;
+    border: none;
+    color: var(--text-tertiary);
+    font-family: var(--font-family);
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.tab-btn:hover {
+    color: var(--text-secondary);
+}
+
+.tab-btn-active {
+    color: var(--text-primary);
+}
+
+.tab-count {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: var(--bg-tertiary);
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+}
+
+.tab-btn-active .tab-count {
+    color: var(--accent);
+    background: var(--accent-glow);
+}
+
+/* Sliding active-tab indicator (motion layoutId), pinned to the bar's edge. */
+.tab-underline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+}
+
+.tab-panel {
+    min-width: 0;
+}
+
+.tab-empty {
+    padding: var(--space-xl) 0;
+    color: var(--text-tertiary);
+    font-size: 0.92rem;
+    text-align: center;
+}
+
+/* --- Sources tab: full, readable list --- */
+.sources-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.source-row {
+    display: flex;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-sm);
+    border-top: 1px solid var(--border-subtle);
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--transition-fast);
+}
+
+.source-row:last-child {
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.source-row:hover {
+    background: var(--bg-secondary);
+}
+
+.source-row-index {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.source-row:hover .source-row-index {
+    background: var(--accent-glow);
+    color: var(--accent);
+}
+
+.source-row-body {
+    min-width: 0;
+}
+
+.source-row-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: 4px;
+}
+
+.source-row-title {
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.45;
+    margin-bottom: 4px;
+}
+
+.source-row:hover .source-row-title {
+    color: var(--accent-hover);
+}
+
+.source-row-snippet {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* --- Images tab: responsive thumbnail grid --- */
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--space-sm);
+}
+
+.image-tile {
+    position: relative;
+    display: block;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    text-decoration: none;
+    transition: border-color var(--transition-base), transform var(--transition-base);
+}
+
+.image-tile:hover {
+    border-color: var(--border-accent);
+    transform: translateY(-2px);
+}
+
+.image-tile-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.image-tile-caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 14px var(--space-sm) 6px;
+    font-size: 0.72rem;
+    color: #fff;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.image-tile:hover .image-tile-caption {
+    opacity: 1;
 }
 
 /* Persistent follow-up composer, pinned to the bottom of the scroll area. */
@@ -647,7 +853,7 @@ body::before {
    ============================================================ */
 
 .sources-section {
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-md);
 }
 
 .sources-label,
@@ -775,8 +981,6 @@ body::before {
     color: var(--text-primary);
     letter-spacing: -0.01em;
     margin-bottom: var(--space-md);
-    padding-top: var(--space-sm);
-    border-top: 1px solid var(--border-subtle);
 }
 
 .answer-header svg {
@@ -864,23 +1068,55 @@ body::before {
     border-radius: 0;
 }
 
+/* Tables: rounded, bordered container that scrolls horizontally on overflow
+   (the backend emits Markdown tables often). `display:block` lets the <table>
+   itself be the scroll container since react-markdown renders no wrapper. */
 .answer-content table {
-    width: 100%;
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
-    margin: 1em 0;
-    font-size: 0.92rem;
+    margin: 1.25em 0;
+    font-size: 0.9rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-hover) transparent;
 }
 
 .answer-content th,
 .answer-content td {
     padding: var(--space-sm) var(--space-md);
-    border: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
     text-align: left;
+    vertical-align: top;
+    line-height: 1.5;
+}
+
+/* No double border against the rounded container edge. */
+.answer-content tr > *:not(:last-child) {
+    border-right: 1px solid var(--border-subtle);
+}
+
+.answer-content tbody tr:last-child > * {
+    border-bottom: none;
 }
 
 .answer-content th {
     background: var(--bg-secondary);
+    color: var(--text-primary);
     font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Zebra rows for scannability. */
+.answer-content tbody tr:nth-child(even) {
+    background: var(--bg-glass);
+}
+
+.answer-content tbody tr:hover {
+    background: var(--bg-secondary);
 }
 
 .typing-cursor {

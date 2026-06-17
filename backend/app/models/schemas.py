@@ -75,6 +75,15 @@ class SearchResult(BaseModel):
     snippet: str
 
 
+class ImageResult(BaseModel):
+    """A single image result from image search (powers the Images tab)."""
+    url: str = ""          # Full-resolution image URL
+    thumbnail: str = ""    # Thumbnail URL (falls back to the full image)
+    title: str = ""        # Image/page title
+    source: str = ""       # URL of the page the image was found on
+    domain: str = ""       # Domain of the source page
+
+
 class RankedChunk(BaseModel):
     """A text chunk with its relevance score after re-ranking."""
     text: str
@@ -116,6 +125,11 @@ class SubQueriesEvent(BaseModel):
 class SourcesEvent(BaseModel):
     """SSE sources event."""
     sources: list[SearchResult]
+
+
+class ImagesEvent(BaseModel):
+    """SSE images event powering the frontend Images tab."""
+    images: list[ImageResult]
 
 
 class TokenEvent(BaseModel):

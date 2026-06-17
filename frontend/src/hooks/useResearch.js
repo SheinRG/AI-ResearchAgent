@@ -26,6 +26,7 @@ export default function useResearch() {
   const [phaseMessage, setPhaseMessage] = useState("");
   const [subQueries, setSubQueries] = useState([]);
   const [sources, setSources] = useState([]);
+  const [images, setImages] = useState([]);
   const [answer, setAnswer] = useState("");
   const [followUps, setFollowUps] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -38,6 +39,7 @@ export default function useResearch() {
   // we can hand a final snapshot to onComplete without waiting for a re-render.
   const answerRef = useRef("");
   const sourcesRef = useRef([]);
+  const imagesRef = useRef([]);
   const followUpsRef = useRef([]);
   const queryRef = useRef("");
   const errorRef = useRef(null);
@@ -72,6 +74,11 @@ export default function useResearch() {
         break;
       }
 
+      case "images":
+        imagesRef.current = data.images || [];
+        setImages(imagesRef.current);
+        break;
+
       case "token":
         answerRef.current += data.token || "";
         setAnswer(answerRef.current);
@@ -93,6 +100,7 @@ export default function useResearch() {
             query: queryRef.current,
             answer: answerRef.current,
             sources: sourcesRef.current,
+            images: imagesRef.current,
             followUps: followUpsRef.current,
             doneData: data,
           });
@@ -141,6 +149,21 @@ export default function useResearch() {
     });
     handleEvent("phase", { phase: "reading", message: "Extracting content from 3 gold-standard sources..." });
     await sleep(1200);
+    if (signal.aborted) return;
+
+    // Mock images (contract shape) so the Images tab works offline.
+    handleEvent("images", {
+      images: Array.from({ length: 4 }, (_, i) => {
+        const seed = `${encodeURIComponent(query)}-${i}`;
+        return {
+          url: `https://picsum.photos/seed/${seed}/800/600`,
+          thumbnail: `https://picsum.photos/seed/${seed}/400/300`,
+          title: `${query} — figure ${i + 1}`,
+          source: `https://example.com/${seed}`,
+          domain: "example.com",
+        };
+      }),
+    });
     if (signal.aborted) return;
     
     // Step 4: Writing / Synthesizing
@@ -193,6 +216,7 @@ In conclusion, scaling **${query}** remains a top priority for teams looking to 
     setPhaseMessage("");
     setSubQueries([]);
     setSources([]);
+    setImages([]);
     setAnswer("");
     setFollowUps([]);
     setIsStreaming(true);
@@ -203,6 +227,7 @@ In conclusion, scaling **${query}** remains a top priority for teams looking to 
     // Reset the snapshot refs for this run and remember the completion handler.
     answerRef.current = "";
     sourcesRef.current = [];
+    imagesRef.current = [];
     followUpsRef.current = [];
     errorRef.current = null;
     queryRef.current = query;
@@ -324,6 +349,7 @@ In conclusion, scaling **${query}** remains a top priority for teams looking to 
     phaseMessage,
     subQueries,
     sources,
+    images,
     answer,
     followUps,
     isStreaming,

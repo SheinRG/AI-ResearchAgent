@@ -1,11 +1,14 @@
 """
 Researcher Node — Search → Scrape → Chunk → Rerank pipeline.
-One researcher node runs per sub-query, executing in parallel via LangGraph Send API.
+Runs ONCE per research turn and fans out over all sub-queries internally with
+asyncio (not via a LangGraph Send fan-out). Because there is a single writer,
+single-value state fields like `images` and `ranked_chunks` are safe without
+reducers — do not convert this to a graph-level fan-out without adding them.
 """
 
 import asyncio
 import logging
-from app.services.search import search_web
+from app.services.search import search_web, search_images
 from app.services.scraper import scrape_urls
 from app.services.reranker import rerank_chunks
 from app.services.cache import cache_get, cache_get_many, cache_set
@@ -33,6 +36,28 @@ async def _search_single_query(sub_query: str, max_results: int) -> tuple[str, l
     return sub_query, results
 
 
+async def _search_and_emit_images(query: str, sse_callback) -> list[dict]:
+    """Fetch images for the ORIGINAL query once and stream them to the UI.
+
+    Runs concurrently with web search so it never delays the answer, and is
+    fully best-effort: any failure yields an empty list and is swallowed here so
+    an image lookup can never break the research run.
+    """
+    try:
+        images = await search_images(query)
+    except Exception as e:  # search_images already guards, but be doubly safe
+        logger.warning("Image search failed for '%s': %s", query[:50], e)
+        images = []
+
+    if sse_callback and images:
+        try:
+            await sse_callback("images", {"images": images})
+        except Exception as e:
+            logger.warning("Failed to emit images event: %s", e)
+
+    return images
+
+
 async def researcher_node(state: ResearchState) -> dict:
     """
     Researcher node: runs the full search → scrape → chunk → rerank pipeline
@@ -46,11 +71,15 @@ async def researcher_node(state: ResearchState) -> dict:
     """
     sub_queries = state.get("sub_queries", [])
     sse_callback = state.get("sse_callback")
+    original_query = state.get("query", "")
     settings = get_settings()
 
     if not sub_queries:
         logger.warning("Researcher: no sub-queries to process")
-        return {"search_results": [], "scraped_content": []}
+        # Still surface images for the original query so the Images tab can fill
+        # even when planning produced no sub-queries.
+        images = await _search_and_emit_images(original_query, sse_callback) if original_query else []
+        return {"search_results": [], "scraped_content": [], "images": images}
 
     logger.info("Researcher: processing %d sub-queries", len(sub_queries))
 
@@ -62,10 +91,17 @@ async def researcher_node(state: ResearchState) -> dict:
         })
 
     # --- Step 1: Search all sub-queries IN PARALLEL ---
+    # The image search runs ONCE for the original user query (not per sub-query,
+    # to limit API usage) concurrently with web search, and streams its own
+    # `images` SSE event from inside the helper.
     search_tasks = [
         _search_single_query(sq, settings.search_results_per_query)
         for sq in sub_queries
     ]
+    image_task = asyncio.ensure_future(
+        _search_and_emit_images(original_query, sse_callback)
+    ) if original_query else None
+
     search_results_per_query = await asyncio.gather(*search_tasks, return_exceptions=True)
 
     all_search_results = []
@@ -157,9 +193,20 @@ async def researcher_node(state: ResearchState) -> dict:
     logger.info("Researcher: generated %d chunks from %d scraped pages",
                 len(all_chunks), len(scraped_content))
 
+    # Collect the concurrently-running image results (already streamed to the UI
+    # inside the helper). Never let an image failure break the run.
+    images: list[dict] = []
+    if image_task is not None:
+        try:
+            images = await image_task
+        except Exception as e:
+            logger.warning("Image task failed: %s", e)
+            images = []
+
     return {
         "search_results": all_search_results,
         "scraped_content": all_chunks,
+        "images": images,
     }
 
 
