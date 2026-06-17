@@ -188,3 +188,10 @@ export const CodeIcon = (props) => (
     <path d="m13 4-2 16" />
   </svg>
 );
+
+export const PanelLeftIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+  </svg>
+);

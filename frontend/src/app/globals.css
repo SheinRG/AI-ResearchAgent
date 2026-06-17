@@ -1748,7 +1748,7 @@ body::before {
     padding: var(--space-md);
     z-index: var(--z-modal);
     flex-shrink: 0;
-    transition: transform var(--transition-base);
+    transition: transform var(--transition-base), margin-left var(--transition-base);
 }
 
 .sidebar-brand {
@@ -1774,6 +1774,57 @@ body::before {
     border: none;
     color: var(--text-tertiary);
     cursor: pointer;
+}
+
+/* Desktop sidebar collapse / reopen buttons */
+.sidebar-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-fast), background var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.sidebar-collapse-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.sidebar-reopen-btn {
+    position: fixed;
+    top: var(--space-md);
+    left: var(--space-md);
+    z-index: var(--z-sticky);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    color: var(--text-secondary);
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.sidebar-reopen-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+@media (min-width: 769px) {
+    .sidebar-collapsed .sidebar-container {
+        margin-left: -260px;
+    }
 }
 
 .sidebar-new-btn {
@@ -2031,6 +2082,14 @@ body::before {
 
     .mobile-close-btn {
         display: flex;
+    }
+
+    .sidebar-collapse-btn {
+        display: none;
+    }
+
+    .sidebar-reopen-btn {
+        display: none;
     }
 
     /* Mobile viewport reserves 60px for the fixed header. */

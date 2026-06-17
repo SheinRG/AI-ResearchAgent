@@ -5,13 +5,14 @@ import { useAuth } from "@/hooks/useAuth";
 import useResearchStore from "@/stores/researchStore";
 import ThemeToggle from "@/components/ThemeToggle";
 import { motion, AnimatePresence } from "motion/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LogoMark,
   PlusIcon,
   MenuIcon,
   CloseIcon,
   LogoutIcon,
+  PanelLeftIcon,
 } from "@/components/Icons";
 
 export default function AppLayout({ children }) {
@@ -20,6 +21,18 @@ export default function AppLayout({ children }) {
   const { user, isAuthenticated, logout } = useAuth();
   const { recentSearches, clearRecentSearches } = useResearchStore();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    setIsCollapsed(localStorage.getItem("sidebar_collapsed") === "true");
+  }, []);
+
+  const toggleCollapse = () =>
+    setIsCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem("sidebar_collapsed", String(next));
+      return next;
+    });
 
   // Don't render sidebar on login page or if not authenticated
   const isLoginPage = pathname === "/login";
@@ -55,7 +68,18 @@ export default function AppLayout({ children }) {
   }
 
   return (
-    <div className="layout-container">
+    <div className={`layout-container ${isCollapsed ? "sidebar-collapsed" : ""}`}>
+      {/* Desktop reopen button — shown only when sidebar is collapsed */}
+      {isCollapsed && (
+        <button
+          className="sidebar-reopen-btn"
+          onClick={toggleCollapse}
+          aria-label="Open sidebar"
+        >
+          <PanelLeftIcon />
+        </button>
+      )}
+
       {/* Mobile Header Toggle */}
       <header className="mobile-header">
         <button
@@ -95,6 +119,13 @@ export default function AppLayout({ children }) {
             aria-label="Close navigation menu"
           >
             <CloseIcon />
+          </button>
+          <button
+            className="sidebar-collapse-btn"
+            onClick={toggleCollapse}
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftIcon width={18} height={18} />
           </button>
         </div>
 
