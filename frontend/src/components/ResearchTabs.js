@@ -6,11 +6,10 @@ import SourcesList from "@/components/SourcesList";
 import ImageGrid from "@/components/ImageGrid";
 
 /**
- * Answer / Sources / Images tabs for a single research turn (Perplexity-style).
- * Local tab state, defaults to "answer". The Answer panel is passed in as
- * `children` so the parent keeps owning the streaming/phase/done/follow-up
- * content; Sources and Images render from the arrays here. The Images tab is
- * hidden entirely when there are no images.
+ * Answer / Sources / Images tabs for a single research turn. Text-only tabs
+ * with a sliding underline (motion layoutId), matching the goon.ai design.
+ * The Answer panel is passed in as `children`; Sources and Images render from
+ * the arrays here. The Images tab is hidden entirely when there are no images.
  */
 export default function ResearchTabs({ sources = [], images = [], children }) {
   const [active, setActive] = useState("answer");
@@ -23,7 +22,7 @@ export default function ResearchTabs({ sources = [], images = [], children }) {
   const tabs = [
     { id: "answer", label: "Answer" },
     { id: "sources", label: "Sources", count: sources.length },
-    ...(hasImages ? [{ id: "images", label: "Images", count: images.length }] : []),
+    ...(hasImages ? [{ id: "images", label: "Images" }] : []),
   ];
 
   return (
@@ -39,7 +38,7 @@ export default function ResearchTabs({ sources = [], images = [], children }) {
             onClick={() => setActive(tab.id)}
           >
             {tab.label}
-            {typeof tab.count === "number" && (
+            {typeof tab.count === "number" && tab.count > 0 && (
               <span className="tab-count">{tab.count}</span>
             )}
             {current === tab.id && (

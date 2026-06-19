@@ -2,26 +2,49 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion } from "motion/react";
-import { ArrowUpIcon, SparklesIcon } from "@/components/Icons";
+import useToast from "@/stores/toastStore";
+import {
+  ArrowUpIcon,
+  PlusIcon,
+  MicIcon,
+  FileTextIcon,
+  CloseIcon,
+} from "@/components/Icons";
 
 const PLACEHOLDERS = [
-  "Ask anything...",
-  "What are the latest breakthroughs in quantum computing?",
-  "How does CRISPR gene editing work?",
-  "What is the current state of nuclear fusion research?",
-  "Explain the implications of recent AI regulation proposals",
+  "Ask anything — I'll research it and cite the sources",
+  "What are the latest breakthroughs in fusion energy?",
+  "How does CRISPR base editing actually work?",
+  "Why is the AI chip supply chain so concentrated?",
 ];
 
+/**
+ * The product's composer. `mode="large"` is the two-row home box (with example
+ * chips rendered by the page); `mode="compact"` is the single-row sticky
+ * follow-up bar. When `withTools` is set it shows the attach + dictate
+ * affordances from the design. Attachments are local/visual (the agent doesn't
+ * ingest files), matching the prototype, with a toast for feedback. Dictation
+ * uses the Web Speech API when available.
+ */
 export default function SearchBar({
   onSearch,
   mode = "large",
   disabled = false,
   placeholder = null,
   clearOnSubmit = false,
+  withTools = true,
 }) {
   const [query, setQuery] = useState("");
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
-  const inputRef = useRef(null);
+  const [attachments, setAttachments] = useState([]);
+  const [listening, setListening] = useState(false);
+
+  const fileRef = useRef(null);
+  const recRef = useRef(null);
+  const stopTimerRef = useRef(null);
+  const showToast = useToast((s) => s.show);
+
+  const isLarge = mode === "large";
 
   // Rotate placeholder text — only when no fixed placeholder is supplied.
   useEffect(() => {
@@ -32,12 +55,27 @@ export default function SearchBar({
     return () => clearInterval(interval);
   }, [placeholder]);
 
+  // Tidy up any in-flight dictation on unmount.
+  useEffect(() => {
+    return () => {
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+      try {
+        recRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const trimmed = query.trim();
     if (trimmed && !disabled) {
       onSearch(trimmed);
-      if (clearOnSubmit) setQuery("");
+      if (clearOnSubmit) {
+        setQuery("");
+        setAttachments([]);
+      }
     }
   };
 
@@ -47,56 +85,178 @@ export default function SearchBar({
     }
   };
 
-  const isLarge = mode === "large";
+  const handleFiles = (e) => {
+    const files = [...(e.target.files || [])].map((f) => ({
+      id: `f${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+      name: f.name,
+    }));
+    e.target.value = "";
+    if (!files.length) return;
+    setAttachments((prev) => [...prev, ...files]);
+    showToast(
+      files.length === 1 ? `Attached ${files[0].name}` : `Attached ${files.length} files`
+    );
+  };
+
+  const removeAttachment = (id) =>
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+
+  const stopDictation = () => {
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+    try {
+      recRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+    recRef.current = null;
+    setListening(false);
+  };
+
+  const toggleDictation = () => {
+    if (listening) {
+      stopDictation();
+      return;
+    }
+    setListening(true);
+    showToast("Listening…");
+    // Visual stays on regardless of mic permission; auto-stops after a few seconds.
+    stopTimerRef.current = setTimeout(stopDictation, 6000);
+    const SR =
+      typeof window !== "undefined" &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (SR) {
+      try {
+        const rec = new SR();
+        rec.lang = "en-US";
+        rec.interimResults = true;
+        rec.continuous = true;
+        rec.onresult = (ev) => {
+          const text = [...ev.results].map((r) => r[0].transcript).join("");
+          setQuery(text);
+        };
+        rec.onend = () => setListening(false);
+        rec.start();
+        recRef.current = rec;
+      } catch {
+        /* ignore — visual-only fallback */
+      }
+    }
+  };
+
+  const tools = withTools ? (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        onChange={handleFiles}
+        style={{ display: "none" }}
+      />
+      <button
+        type="button"
+        className="ask-icon-btn"
+        onClick={() => fileRef.current?.click()}
+        title="Add files"
+        aria-label="Add files"
+      >
+        <PlusIcon width={isLarge ? 19 : 18} height={isLarge ? 19 : 18} />
+      </button>
+    </>
+  ) : null;
+
+  const dictateBtn = withTools ? (
+    <button
+      type="button"
+      className={`ask-icon-btn ${listening ? "is-listening" : ""}`}
+      onClick={toggleDictation}
+      title={listening ? "Stop dictation" : "Dictate"}
+      aria-label={listening ? "Stop dictation" : "Dictate"}
+    >
+      <MicIcon width={17} height={17} />
+    </button>
+  ) : null;
+
+  const submitBtn = (
+    <button
+      type="submit"
+      className="ask-submit"
+      disabled={!query.trim() || disabled}
+      aria-label="Start research"
+    >
+      <ArrowUpIcon width={isLarge ? 18 : 17} height={isLarge ? 18 : 17} />
+    </button>
+  );
 
   return (
     <motion.div
       className="search-container"
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: 0.15 }}
+      transition={{ duration: 0.4, delay: 0.1 }}
     >
       <form
         onSubmit={handleSubmit}
         className={`ask-box ${isLarge ? "" : "ask-box-compact"}`}
       >
-        <input
-          ref={inputRef}
-          id="search-input"
-          type="text"
-          className="ask-input"
-          placeholder={placeholder || PLACEHOLDERS[placeholderIdx]}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          autoComplete="off"
-          aria-label="Research question"
-        />
-        {isLarge ? (
-          <div className="ask-toolbar">
-            <span className="ask-badge" title="Multi-step research with cited sources">
-              <SparklesIcon width={13} height={13} />
-              deep research
-            </span>
-            <button
-              type="submit"
-              className="ask-submit"
-              disabled={!query.trim() || disabled}
-              aria-label="Start research"
-            >
-              <ArrowUpIcon width={17} height={17} />
-            </button>
+        {isLarge && attachments.length > 0 && (
+          <div className="ask-attachments">
+            {attachments.map((a) => (
+              <span key={a.id} className="ask-chip">
+                <FileTextIcon width={12} height={12} />
+                <span className="ask-chip-name">{a.name}</span>
+                <button
+                  type="button"
+                  className="ask-chip-remove"
+                  onClick={() => removeAttachment(a.id)}
+                  title="Remove"
+                  aria-label={`Remove ${a.name}`}
+                >
+                  <CloseIcon width={12} height={12} />
+                </button>
+              </span>
+            ))}
           </div>
+        )}
+
+        {isLarge ? (
+          <>
+            <input
+              id="search-input"
+              type="text"
+              className="ask-input"
+              placeholder={placeholder || PLACEHOLDERS[placeholderIdx]}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={disabled}
+              autoComplete="off"
+              aria-label="Research question"
+            />
+            <div className="ask-toolbar">
+              {tools}
+              <div className="ask-tools-right">
+                {dictateBtn}
+                {submitBtn}
+              </div>
+            </div>
+          </>
         ) : (
-          <button
-            type="submit"
-            className="ask-submit"
-            disabled={!query.trim() || disabled}
-            aria-label="Start research"
-          >
-            <ArrowUpIcon width={16} height={16} />
-          </button>
+          <>
+            {tools}
+            <input
+              type="text"
+              className="ask-input"
+              placeholder={placeholder || PLACEHOLDERS[placeholderIdx]}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={disabled}
+              autoComplete="off"
+              aria-label="Ask a follow-up"
+            />
+            {dictateBtn}
+            {submitBtn}
+          </>
         )}
       </form>
     </motion.div>

@@ -23,7 +23,7 @@ export default function FollowUpChips({ suggestions = [], onSelect = null, disab
 
   return (
     <div className="followup-section">
-      <div className="followup-label">Related</div>
+      <div className="followup-label">Keep digging</div>
       <div className="followup-chips">
         <AnimatePresence>
           {suggestions.map((suggestion, index) => (
@@ -38,12 +38,11 @@ export default function FollowUpChips({ suggestions = [], onSelect = null, disab
                 delay: index * 0.1,
                 ease: [0.25, 0.46, 0.45, 0.94],
               }}
-              whileHover={{ x: 4 }}
             >
+              <span>{suggestion}</span>
               <span className="followup-chip-icon">
-                <ArrowRightIcon width={16} height={16} />
+                <ArrowRightIcon width={15} height={15} />
               </span>
-              {suggestion}
             </motion.button>
           ))}
         </AnimatePresence>

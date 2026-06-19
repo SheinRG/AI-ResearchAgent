@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useAuth } from "@/hooks/useAuth";
 import ThemeToggle from "@/components/ThemeToggle";
-import { LogoMark } from "@/components/Icons";
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -13,7 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  
+
   const { login, register, loginWithGoogle, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
@@ -73,12 +72,9 @@ export default function LoginPage() {
       return;
     }
 
-    let result;
-    if (isLogin) {
-      result = await login(email, password);
-    } else {
-      result = await register(email, password, name);
-    }
+    const result = isLogin
+      ? await login(email, password)
+      : await register(email, password, name);
 
     if (result.success) {
       router.push("/");
@@ -89,97 +85,106 @@ export default function LoginPage() {
 
   if (isLoading && isAuthenticated) return null; // Wait for redirect
 
+  const hasGoogle = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+
   return (
-    <>
-      <nav className="navbar">
-        <a href="/" className="navbar-brand">
-          <span className="navbar-brand-icon">
-            <LogoMark size={24} />
-          </span>
-          <span className="brand-text">
-            goon<span className="wordmark-accent">.ai</span>
-          </span>
-        </a>
-        <div className="navbar-actions">
-          <ThemeToggle />
+    <main className="login-page">
+      <div className="login-theme-toggle">
+        <ThemeToggle showLabel />
+      </div>
+
+      <motion.div
+        className="login-card"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55 }}
+      >
+        <div className="login-brand">
+          goon<span className="wordmark-accent">.ai</span>
         </div>
-      </nav>
 
-      <main className="main-content login-page">
-        <motion.div 
-          className="login-card"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="login-logo">
-            <LogoMark size={40} />
-          </div>
-          <h1 className="login-title">{isLogin ? "Welcome back" : "Create account"}</h1>
-          <p className="login-subtitle">
-            {isLogin ? "Log in to view your research history." : "Sign up to start researching."}
-          </p>
+        <h1 className="login-title">
+          {isLogin ? "Ask better" : "Start asking"}
+          <br />
+          <span className="login-title-em">
+            {isLogin ? "questions." : "better."}
+          </span>
+        </h1>
+        <p className="login-subtitle">
+          A research agent that plans, searches the web, reads the sources, and
+          writes you a cited answer.
+        </p>
 
-          <div id="google-signin-btn" className="login-button-google-wrapper"></div>
-          
-          <div className="login-divider">
-            <span>or continue with email</span>
-          </div>
+        <form className="login-form" onSubmit={handleSubmit}>
+          {error && <div className="login-error">{error}</div>}
 
-          <form className="login-form" onSubmit={handleSubmit}>
-            {error && <div className="login-error">{error}</div>}
-            
-            {!isLogin && (
-              <div className="login-field">
-                <label className="login-label" htmlFor="name">Name</label>
-                <input 
-                  className="login-input" 
-                  type="text" 
-                  id="name" 
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="John Doe" 
-                />
-              </div>
-            )}
-            
-            <div className="login-field">
-              <label className="login-label" htmlFor="email">Email</label>
-              <input 
-                className="login-input" 
-                type="email" 
-                id="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com" 
-              />
-            </div>
-            
-            <div className="login-field">
-              <label className="login-label" htmlFor="password">Password</label>
-              <input 
-                className="login-input" 
-                type="password" 
-                id="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••" 
-              />
-            </div>
-            
-            <button className="login-button" type="submit" disabled={isLoading}>
-              {isLoading ? "Please wait..." : (isLogin ? "Sign In" : "Sign Up")}
-            </button>
-          </form>
+          {!isLogin && (
+            <input
+              className="login-input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              aria-label="Name"
+            />
+          )}
 
-          <div className="login-toggle">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <button type="button" onClick={() => { setIsLogin(!isLogin); setError(""); }}>
-              {isLogin ? "Sign up" : "Log in"}
-            </button>
-          </div>
-        </motion.div>
-      </main>
-    </>
+          <input
+            className="login-input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@work.com"
+            aria-label="Email"
+          />
+          <input
+            className="login-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            aria-label="Password"
+          />
+          <button className="login-button" type="submit" disabled={isLoading}>
+            {isLoading ? "Please wait…" : "Continue"}
+          </button>
+        </form>
+
+        <div className="login-divider">
+          <span>or</span>
+        </div>
+
+        {/* Real Google button mounts here when configured; the static fallback
+            keeps the layout intact (and triggers email/password) otherwise. */}
+        <div id="google-signin-btn" className="login-google-wrapper" />
+        {!hasGoogle && (
+          <button
+            type="button"
+            className="login-google-fallback"
+            onClick={() => setError("Configure Google sign-in or use email above.")}
+          >
+            <span className="g-mark">G</span>
+            Continue with Google
+          </button>
+        )}
+
+        <div className="login-toggle">
+          {isLogin ? "New here? " : "Already have an account? "}
+          <button
+            type="button"
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError("");
+            }}
+          >
+            {isLogin ? "Create an account" : "Log in"}
+          </button>
+        </div>
+
+        <p className="login-fineprint">
+          By continuing you agree to the terms. This is a research prototype.
+        </p>
+      </motion.div>
+    </main>
   );
 }

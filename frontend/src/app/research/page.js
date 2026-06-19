@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import SearchBar from "@/components/SearchBar";
 import ResearchTurn from "@/components/ResearchTurn";
+import SessionHeader from "@/components/SessionHeader";
 import SkeletonLoader from "@/components/SkeletonLoader";
 import useResearch from "@/hooks/useResearch";
 import useResearchStore from "@/stores/researchStore";
@@ -32,6 +33,7 @@ function ResearchContent() {
   // The conversation thread: completed turns, plus the one currently streaming.
   const [turns, setTurns] = useState([]);
   const [activeQuery, setActiveQuery] = useState(null);
+  const [sessionTitle, setSessionTitle] = useState(null); // user-renamed title
 
   const seedRef = useRef(null); // URL query that seeded the current thread
   const sessionIdRef = useRef(null); // session id shared by every turn in the thread
@@ -70,6 +72,7 @@ function ResearchContent() {
     seedRef.current = urlQuery;
     sessionIdRef.current = null;
     setTurns([]);
+    setSessionTitle(null);
     setActiveQuery(urlQuery);
     addRecentSearch(urlQuery);
     startResearch(urlQuery, 1, token, [], null, handleComplete);
@@ -104,12 +107,18 @@ function ResearchContent() {
 
   const showSkeleton = isStreaming && !answer && sources.length === 0;
   const hasThread = turns.length > 0 || Boolean(activeQuery);
+  const headerTitle =
+    sessionTitle || turns[0]?.query || activeQuery || "Untitled session";
 
   if (isLoading || !isAuthenticated) return null;
 
   return (
-    <main className="main-content">
-      <div className="research-page research-thread">
+    <main className="research-page">
+      <div className="research-thread">
+        {hasThread && (
+          <SessionHeader title={headerTitle} onRename={setSessionTitle} />
+        )}
+
         {turns.map((turn) => (
           <ResearchTurn
             key={turn.id}
@@ -162,8 +171,8 @@ export default function ResearchPage() {
   return (
     <Suspense
       fallback={
-        <div className="main-content">
-          <div className="research-page">
+        <div className="research-page">
+          <div className="research-thread">
             <SkeletonLoader />
           </div>
         </div>

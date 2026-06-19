@@ -1,27 +1,20 @@
 import "./globals.css";
-import { Raleway } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AccentProvider } from "@/components/AccentProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 import AppLayout from "@/components/AppLayout";
-
-// Display typeface for the landing hero. Self-hosted at build time by
-// next/font; exposed as a CSS variable so globals.css can scope it.
-const raleway = Raleway({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-raleway",
-});
+import Toast from "@/components/Toast";
 
 export const metadata = {
-  title: "goon.ai — Research, with receipts",
+  title: "goon.ai — Ask better questions",
   description:
-    "An autonomous AI research agent that searches the web, analyzes sources, and delivers comprehensive answers with verifiable citations.",
+    "A research agent that plans, searches the web, reads the sources, and writes you a cited answer.",
   keywords: ["AI research", "search agent", "cited answers", "deep research"],
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={raleway.variable} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -30,17 +23,20 @@ export default function RootLayout({ children }) {
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
       </head>
       <body>
         <ThemeProvider>
-          <AuthProvider>
-            <AppLayout>
-              <div className="app-container">{children}</div>
-            </AppLayout>
-          </AuthProvider>
+          <AccentProvider>
+            <AuthProvider>
+              <AppLayout>
+                <div className="app-container">{children}</div>
+              </AppLayout>
+              <Toast />
+            </AuthProvider>
+          </AccentProvider>
         </ThemeProvider>
       </body>
     </html>

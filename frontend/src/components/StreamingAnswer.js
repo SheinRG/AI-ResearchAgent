@@ -32,10 +32,6 @@ export default function StreamingAnswer({ answer = "", isStreaming = false, sour
 
   return (
     <div className="answer-section">
-      <div className="answer-header">
-        <SparklesIcon width={16} height={16} />
-        Answer
-      </div>
       <div className="answer-container">
         <div className="answer-content">
           <ReactMarkdown

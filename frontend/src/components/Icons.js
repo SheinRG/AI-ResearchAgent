@@ -3,8 +3,6 @@
  * Minimal, consistent, accessible (no emoji-as-icons).
  */
 
-import { useId } from "react";
-
 const base = {
   width: 20,
   height: 20,
@@ -17,33 +15,20 @@ const base = {
   "aria-hidden": true,
 };
 
-export const LogoMark = ({ size = 28 }) => {
-  // Unique gradient id per instance: a shared id resolves to the first DOM
-  // match, which may sit inside a display:none container (e.g. the hidden
-  // mobile header) and silently break the fill.
-  const id = useId();
-  const gradId = `brand-grad-${id.replace(/[^a-zA-Z0-9-]/g, "")}`;
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="24" y2="24">
-          <stop offset="0%" stopColor="#30d2bd" />
-          <stop offset="100%" stopColor="#0f8d7c" />
-        </linearGradient>
-      </defs>
-      {/* rounded-square tile with an open ring — search/focus motif */}
-      <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill={`url(#${gradId})`} />
-      <path
-        d="M16.5 12a4.5 4.5 0 1 1-4.5-4.5"
-        stroke="#07221e"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <circle cx="16.5" cy="7.5" r="1.4" fill="#07221e" />
-    </svg>
-  );
-};
+export const LogoMark = ({ size = 28 }) => (
+  // Constellation / node-graph mark: three outer nodes linked to an accent core.
+  // `currentColor` drives the spokes + outer dots so it inherits ink; the core
+  // uses the live --accent token.
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden style={{ flex: "none" }}>
+    <line x1="16" y1="15" x2="6" y2="8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.45" />
+    <line x1="16" y1="15" x2="26" y2="9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.45" />
+    <line x1="16" y1="15" x2="17" y2="27" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.45" />
+    <circle cx="6" cy="8" r="2.3" fill="currentColor" />
+    <circle cx="26" cy="9" r="2.3" fill="currentColor" />
+    <circle cx="17" cy="27" r="2.3" fill="currentColor" />
+    <circle cx="16" cy="15" r="3.8" fill="var(--accent)" />
+  </svg>
+);
 
 export const SearchIcon = (props) => (
   <svg {...base} {...props}>
@@ -193,5 +178,143 @@ export const PanelLeftIcon = (props) => (
   <svg {...base} {...props}>
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <path d="M9 4v16" />
+  </svg>
+);
+
+export const CopyIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+export const ShareIcon = (props) => (
+  <svg {...base} {...props}>
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+  </svg>
+);
+
+export const DownloadIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M12 15V3" />
+  </svg>
+);
+
+export const GlobeAltIcon = (props) => (
+  <svg {...base} {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3a13.5 13.5 0 0 1 0 18 13.5 13.5 0 0 1 0-18Z" />
+  </svg>
+);
+
+export const ImageIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+    <path d="m21 15-5-5L5 21" />
+  </svg>
+);
+
+export const MicIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+    <path d="M19 10a7 7 0 0 1-14 0" />
+    <path d="M12 17v5" />
+  </svg>
+);
+
+export const NoteIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M15.5 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z" />
+    <path d="M9 12h6" />
+    <path d="M12 9v6" />
+  </svg>
+);
+
+export const FileTextIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M14 3v5h5" />
+    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+  </svg>
+);
+
+export const ThumbsUpIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M7 10v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z" />
+    <path d="M7 10l4-7a2 2 0 0 1 3 1.8L13 9h5.5a2 2 0 0 1 2 2.4l-1.2 6A2 2 0 0 1 16.3 21H7" />
+  </svg>
+);
+
+export const ThumbsDownIcon = (props) => (
+  <svg {...base} {...props} style={{ transform: "rotate(180deg)", ...(props?.style || {}) }}>
+    <path d="M7 10v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z" />
+    <path d="M7 10l4-7a2 2 0 0 1 3 1.8L13 9h5.5a2 2 0 0 1 2 2.4l-1.2 6A2 2 0 0 1 16.3 21H7" />
+  </svg>
+);
+
+export const RefreshIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+    <path d="M21 3v6h-6" />
+  </svg>
+);
+
+export const MoreIcon = (props) => (
+  <svg {...base} {...props} fill="currentColor" stroke="none">
+    <circle cx="5" cy="12" r="1.7" />
+    <circle cx="12" cy="12" r="1.7" />
+    <circle cx="19" cy="12" r="1.7" />
+  </svg>
+);
+
+export const TrashIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M3 6h18" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </svg>
+);
+
+export const ChevronRightIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="m9 6 6 6-6 6" />
+  </svg>
+);
+
+export const LanguageIcon = (props) => (
+  <svg {...base} {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z" />
+  </svg>
+);
+
+export const MonitorIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3" y="4" width="18" height="13" rx="2" />
+    <path d="M8 21h8" />
+    <path d="M12 17v4" />
+  </svg>
+);
+
+export const SwatchIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M11 3a8 8 0 1 0 8 8 4 4 0 0 1-4-4 4 4 0 0 1-4-4z" />
+    <circle cx="7.5" cy="11.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="9.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="13.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const CheckIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M20 6 9 17l-5-5" />
   </svg>
 );

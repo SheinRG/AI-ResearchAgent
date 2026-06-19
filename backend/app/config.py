@@ -21,9 +21,10 @@ class Settings(BaseSettings):
     # to trade answer quality for lower cost/latency.
     groq_synth_model: str = "llama-3.3-70b-versatile"
     groq_timeout: int = 60  # seconds
-    # Concise/adaptive answers: enough for a solid reply plus a table, but tight
-    # enough to discourage rambling. The synthesizer can (and should) use fewer.
-    synth_max_tokens: int = 1200  # max answer length for the synthesizer
+    # Headroom for a thorough, well-developed answer (multi-paragraph + a table
+    # or list) without inviting rambling. The synthesizer scales depth to the
+    # question and can use fewer.
+    synth_max_tokens: int = 2000  # max answer length for the synthesizer
     # Transient-failure retries (429/5xx/timeouts) before giving up on a call.
     groq_max_retries: int = 2
     groq_retry_base_delay: float = 0.8  # seconds, doubled each retry

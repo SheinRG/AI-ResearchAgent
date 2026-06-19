@@ -1,59 +1,35 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import SearchBar from "@/components/SearchBar";
 import { useAuth } from "@/hooks/useAuth";
 
-// Time-aware openers, framed for someone who's here to *work* — so the late
-// hours nudge ("burning the midnight oil"), they don't sign off ("good night").
-// Phrased as statements so a ", Name" can be appended cleanly.
-const GREETINGS = {
-  morning: ["Good morning", "Morning", "Rise and shine", "Fresh start"],
-  afternoon: ["Good afternoon", "Afternoon", "Hope the day's going well"],
-  evening: ["Good evening", "Evening", "Winding down or digging in"],
-  night: [
-    "Burning the midnight oil",
-    "Working late",
-    "Late-night deep dive",
-    "Still going strong",
-  ],
-};
+// Time-aware openers, framed for someone here to *work* — late hours nudge
+// ("Working late") rather than sign off. Phrased so a ", Name" appends cleanly.
+function greetingForHour(hour) {
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 22) return "Good evening";
+  return "Working late";
+}
 
-// Rotating curiosity sub-line under the greeting.
-const PHRASES = [
-  "What's going on?",
-  "What are you curious about?",
-  "What do you want to know?",
-  "What's on your mind?",
-  "Let's dig into something.",
-  "Ask me anything.",
+const EXAMPLES = [
+  "What are the latest breakthroughs in fusion energy?",
+  "How does CRISPR base editing actually work?",
+  "Why is the AI chip supply chain so concentrated?",
 ];
-
-function bucketForHour(hour) {
-  if (hour >= 5 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 17) return "afternoon";
-  if (hour >= 17 && hour < 22) return "evening";
-  return "night";
-}
-
-function pick(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 export default function HomePage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
 
-  // Greeting + phrase depend on the client clock and Math.random, so resolve
-  // them after mount to avoid a server/client hydration mismatch.
+  // Greeting depends on the client clock, so resolve after mount to avoid a
+  // server/client hydration mismatch.
   const [greeting, setGreeting] = useState("");
-  const [phrase, setPhrase] = useState("");
 
   useEffect(() => {
-    setGreeting(pick(GREETINGS[bucketForHour(new Date().getHours())]));
-    setPhrase(pick(PHRASES));
+    setGreeting(greetingForHour(new Date().getHours()));
   }, []);
 
   useEffect(() => {
@@ -63,8 +39,7 @@ export default function HomePage() {
   }, [isAuthenticated, isLoading, router]);
 
   const handleSearch = (query) => {
-    const encoded = encodeURIComponent(query);
-    router.push(`/research?q=${encoded}`);
+    router.push(`/research?q=${encodeURIComponent(query)}`);
   };
 
   if (isLoading || !isAuthenticated) return null;
@@ -74,21 +49,32 @@ export default function HomePage() {
   return (
     <main className="home-hero">
       <div className="home-hero-inner">
-        <motion.div
-          className="home-greeting"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.05 }}
-        >
+        <div className="home-greeting">
           <h1 className="home-greeting-title">
             {greeting}
             {name ? <span className="home-greeting-name">, {name}</span> : null}
+            <span className="home-greeting-dot">.</span>
           </h1>
-          <p className="home-greeting-sub">{phrase}</p>
-        </motion.div>
+          <p className="home-greeting-sub">
+            What do you want to understand today?
+          </p>
+        </div>
 
         <div className="home-search">
           <SearchBar onSearch={handleSearch} mode="large" />
+
+          <div className="suggestion-row">
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                className="suggestion-chip"
+                onClick={() => handleSearch(ex)}
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </main>

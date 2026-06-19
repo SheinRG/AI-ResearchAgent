@@ -13,6 +13,29 @@ const useResearchStore = create(
       // Recent searches (persisted)
       recentSearches: [],
 
+      // Quick notes (persisted) — jotted thoughts shown in the sidebar
+      notes: [],
+
+      addNote: (text) => {
+        const trimmed = (text || "").trim();
+        if (!trimmed) return;
+        const note = { id: `n${Date.now()}`, text: trimmed, timestamp: Date.now() };
+        set({ notes: [note, ...get().notes] });
+      },
+
+      updateNote: (id, text) => {
+        const trimmed = (text || "").trim();
+        set({
+          notes: get().notes.map((n) =>
+            n.id === id ? { ...n, text: trimmed, timestamp: Date.now() } : n
+          ),
+        });
+      },
+
+      deleteNote: (id) => {
+        set({ notes: get().notes.filter((n) => n.id !== id) });
+      },
+
       // Add a search to recent history
       addRecentSearch: (query) => {
         const { recentSearches } = get();
@@ -37,6 +60,7 @@ const useResearchStore = create(
       name: "research-store",
       partialize: (state) => ({
         recentSearches: state.recentSearches,
+        notes: state.notes,
       }),
     }
   )

@@ -1,29 +1,58 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { motion } from "motion/react";
-import SourceCards from "@/components/SourceCards";
 import ResearchTabs from "@/components/ResearchTabs";
 import PhaseIndicator from "@/components/PhaseIndicator";
 import StreamingAnswer from "@/components/StreamingAnswer";
 import FollowUpChips from "@/components/FollowUpChips";
 import SkeletonLoader from "@/components/SkeletonLoader";
-import { AlertIcon, CheckCircleIcon } from "@/components/Icons";
+import useToast from "@/stores/toastStore";
+import {
+  AlertIcon,
+  CheckIcon,
+  CopyIcon,
+  RefreshIcon,
+  ThumbsUpIcon,
+  ThumbsDownIcon,
+  PenIcon,
+} from "@/components/Icons";
 
-function getConfidenceClass(confidence) {
-  if (confidence >= 0.8) return "confidence-high";
-  if (confidence >= 0.6) return "confidence-medium";
-  return "confidence-low";
+/** Copy-to-clipboard button with a transient "Copied" flash. */
+function CopyButton({ text, title = "Copy", size = 14 }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }, [text]);
+
+  return (
+    <button
+      className={`msg-action-btn ${copied ? "is-active" : ""}`}
+      onClick={onCopy}
+      title={copied ? "Copied" : title}
+      aria-label={title}
+    >
+      {copied ? (
+        <CheckIcon width={size} height={size} />
+      ) : (
+        <CopyIcon width={size} height={size} />
+      )}
+    </button>
+  );
 }
 
 /**
- * A single question/answer turn in a research thread (Perplexity-style): the
- * question renders as a right-aligned chat bubble, and below it a tabbed answer
- * card (Answer / Sources / Images). A compact source preview strip sits above
- * the tabs once sources arrive.
- *
- * The Answer tab holds the live answer content: the in-progress phase
- * indicator, skeleton, streaming/final answer, the confidence/stats bar, any
- * error with a retry action, and related follow-up chips.
+ * A single question/answer turn in a research thread. The question is a
+ * right-aligned bubble with hover actions (copy / resend / edit); below it a
+ * tabbed answer card (Answer / Sources / Images) followed, once complete, by a
+ * done bar, feedback actions (copy / regenerate / like / dislike) and
+ * follow-ups.
  */
 export default function ResearchTurn({
   query,
@@ -41,7 +70,31 @@ export default function ResearchTurn({
   onFollowUp = null,
   onRetry = null,
 }) {
-  // The Answer tab content — everything that was previously in `.chat-answer`.
+  const showToast = useToast((s) => s.show);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(query);
+  const [feedback, setFeedback] = useState(null); // "up" | "down" | null
+
+  const canAct = Boolean(onFollowUp);
+  const isDone = Boolean(doneData) && !isStreaming;
+
+  const resend = () => onFollowUp?.(query);
+
+  const saveEdit = () => {
+    const next = editText.trim();
+    setEditing(false);
+    if (next) onFollowUp?.(next);
+  };
+
+  const setVote = (vote) => {
+    setFeedback((prev) => {
+      const next = prev === vote ? null : vote;
+      if (next === "up") showToast("Thanks for the feedback");
+      else if (next === "down") showToast("Noted — we'll do better");
+      return next;
+    });
+  };
+
   const answerPanel = (
     <>
       {isLive && phase && !error && !doneData && (
@@ -61,7 +114,7 @@ export default function ResearchTurn({
           <div className="error-message">{error}</div>
           {onRetry && (
             <button className="error-retry" onClick={onRetry}>
-              Try Again
+              Try again
             </button>
           )}
         </motion.div>
@@ -70,41 +123,56 @@ export default function ResearchTurn({
       {isLive && showSkeleton && !error && <SkeletonLoader />}
 
       {answer && (
-        <StreamingAnswer
-          answer={answer}
-          isStreaming={isStreaming}
-          sources={sources}
-        />
+        <StreamingAnswer answer={answer} isStreaming={isStreaming} sources={sources} />
       )}
 
       {doneData && (
-        <motion.div
-          className="done-bar"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <span
-            className={`confidence-badge ${getConfidenceClass(
-              doneData.confidence
-            )}`}
-          >
-            <CheckCircleIcon width={14} height={14} />
+        <div className="done-bar">
+          <span className="done-confidence">
+            <CheckIcon width={13} height={13} />
             {Math.round((doneData.confidence || 0) * 100)}% confidence
           </span>
-          <span className="done-separator" />
-          <span className="done-stat">
-            <span className="done-stat-value">
-              {doneData.total_sources || 0}
-            </span>{" "}
-            sources
+          <span className="done-separator">/</span>
+          <span>{doneData.total_sources || sources.length || 0} sources</span>
+          <span className="done-separator">/</span>
+          <span>
+            {doneData.iterations || 1}{" "}
+            {(doneData.iterations || 1) === 1 ? "iteration" : "iterations"}
           </span>
-          <span className="done-separator" />
-          <span className="done-stat">
-            <span className="done-stat-value">{doneData.iterations || 1}</span>{" "}
-            {doneData.iterations === 1 ? "iteration" : "iterations"}
-          </span>
-        </motion.div>
+        </div>
+      )}
+
+      {/* Feedback actions — once the answer is complete */}
+      {isDone && answer && (
+        <div className="msg-actions msg-actions-ai">
+          <CopyButton text={answer} title="Copy answer" size={15} />
+          {canAct && (
+            <button
+              className="msg-action-btn"
+              onClick={resend}
+              title="Regenerate"
+              aria-label="Regenerate answer"
+            >
+              <RefreshIcon width={15} height={15} />
+            </button>
+          )}
+          <button
+            className={`msg-action-btn ${feedback === "up" ? "is-active" : ""}`}
+            onClick={() => setVote("up")}
+            title="Good answer"
+            aria-label="Good answer"
+          >
+            <ThumbsUpIcon width={15} height={15} />
+          </button>
+          <button
+            className={`msg-action-btn ${feedback === "down" ? "is-active" : ""}`}
+            onClick={() => setVote("down")}
+            title="Needs work"
+            aria-label="Needs work"
+          >
+            <ThumbsDownIcon width={15} height={15} />
+          </button>
+        </div>
       )}
 
       {followUps.length > 0 && (
@@ -119,20 +187,73 @@ export default function ResearchTurn({
 
   return (
     <section className="chat-turn">
-      {/* User question — right-aligned chat bubble (a "sent message"). */}
-      <motion.div
-        className="chat-question"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        {query}
-      </motion.div>
+      {/* User question — right-aligned bubble with hover actions. */}
+      <div className="chat-question-row">
+        {editing ? (
+          <div className="chat-question-edit">
+            <textarea
+              rows={2}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              autoFocus
+            />
+            <div className="chat-edit-actions">
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setEditText(query);
+                }}
+              >
+                Cancel
+              </button>
+              <button className="btn-accent" onClick={saveEdit}>
+                Update
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <motion.div
+              className="chat-question"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {query}
+            </motion.div>
+            <div className="msg-actions">
+              <CopyButton text={query} title="Copy" />
+              {canAct && (
+                <>
+                  <button
+                    className="msg-action-btn"
+                    onClick={resend}
+                    title="Resend"
+                    aria-label="Resend question"
+                  >
+                    <RefreshIcon width={14} height={14} />
+                  </button>
+                  <button
+                    className="msg-action-btn"
+                    onClick={() => {
+                      setEditText(query);
+                      setEditing(true);
+                    }}
+                    title="Edit"
+                    aria-label="Edit question"
+                  >
+                    <PenIcon width={14} height={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
-      {/* Answer area — compact source preview, then tabbed content. */}
+      {/* Answer area — tabs then content. */}
       <div className="chat-answer">
-        {sources.length > 0 && <SourceCards sources={sources} />}
-
         <ResearchTabs sources={sources} images={images}>
           {answerPanel}
         </ResearchTabs>
