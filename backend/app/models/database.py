@@ -35,6 +35,7 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     sessions = relationship("ResearchSession", back_populates="user", cascade="all, delete-orphan")
+    notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
 
 
 class ResearchSession(Base):
@@ -68,6 +69,19 @@ class ResearchQuery(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     session = relationship("ResearchSession", back_populates="queries")
+
+
+class Note(Base):
+    """A user-created note stored in the database."""
+    __tablename__ = "notes"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    user = relationship("User", back_populates="notes")
 
 
 # --- Database Engine & Session Factory ---

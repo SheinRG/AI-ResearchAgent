@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     auth_token_expiry_hours: int = 72  # 3 days
 
     # --- Agent Settings ---
-    max_iterations: int = 1
+    max_iterations: int = 2
     max_sub_queries: int = 4
     search_results_per_query: int = 5
     scrape_top_n: int = 3

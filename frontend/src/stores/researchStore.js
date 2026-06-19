@@ -6,9 +6,12 @@ import { persist } from "zustand/middleware";
 /**
  * Zustand store for research session state.
  *
- * Persisted (localStorage): recentSearches, notes.
+ * Persisted (localStorage): recentSearches.
  * Transient (in-memory only): sessionsNonce — incremented whenever a research
  * turn completes so AppLayout knows to re-fetch the sessions list from the DB.
+ *
+ * Notes are no longer stored here — they live in the DB and are fetched via
+ * GET /api/notes in AppLayout.
  */
 const useResearchStore = create(
   persist(
@@ -19,29 +22,6 @@ const useResearchStore = create(
 
       /** Recent searches (local fallback; sidebar now prefers the DB list). */
       recentSearches: [],
-
-      /** Quick notes — jotted thoughts shown in the sidebar. */
-      notes: [],
-
-      addNote: (text) => {
-        const trimmed = (text || "").trim();
-        if (!trimmed) return;
-        const note = { id: `n${Date.now()}`, text: trimmed, timestamp: Date.now() };
-        set({ notes: [note, ...get().notes] });
-      },
-
-      updateNote: (id, text) => {
-        const trimmed = (text || "").trim();
-        set({
-          notes: get().notes.map((n) =>
-            n.id === id ? { ...n, text: trimmed, timestamp: Date.now() } : n
-          ),
-        });
-      },
-
-      deleteNote: (id) => {
-        set({ notes: get().notes.filter((n) => n.id !== id) });
-      },
 
       /** Add a search to local recent-history (deduped, max 10). */
       addRecentSearch: (query) => {
@@ -81,7 +61,6 @@ const useResearchStore = create(
       // page load and always triggers an initial fetch in AppLayout.
       partialize: (state) => ({
         recentSearches: state.recentSearches,
-        notes: state.notes,
       }),
     }
   )

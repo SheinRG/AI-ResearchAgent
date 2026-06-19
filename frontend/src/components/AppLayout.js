@@ -20,7 +20,6 @@ import {
   FileTextIcon,
   ClockIcon,
   ChevronRightIcon,
-  LanguageIcon,
   SunIcon,
   MoonIcon,
   MonitorIcon,
@@ -48,8 +47,7 @@ export default function AppLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, token, logout } = useAuth();
-  const { notes, addNote, updateNote, deleteNote, sessionsNonce } =
-    useResearchStore();
+  const { sessionsNonce } = useResearchStore();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { accent, setAccent } = useAccent();
   const showToast = useToast((s) => s.show);
@@ -62,6 +60,9 @@ export default function AppLayout({ children }) {
 
   // DB-backed session history for the sidebar.
   const [dbSessions, setDbSessions] = useState([]);
+
+  // DB-backed notes for the sidebar.
+  const [apiNotes, setApiNotes] = useState([]);
 
   // Note modal: { id } where id=null means a new note.
   const [noteModal, setNoteModal] = useState(null);
@@ -94,9 +95,28 @@ export default function AppLayout({ children }) {
     }
   }, [token]);
 
+  /** Fetch notes from GET /api/notes. */
+  const fetchNotes = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/notes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setApiNotes(Array.isArray(data) ? data : []);
+    } catch {
+      // Network error — keep existing notes visible.
+    }
+  }, [token]);
+
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions, sessionsNonce, pathname]);
+
+  useEffect(() => {
+    fetchNotes();
+  }, [fetchNotes]);
 
   const toggleCollapse = () =>
     setIsCollapsed((v) => {
@@ -124,7 +144,7 @@ export default function AppLayout({ children }) {
     setAppearanceOpen(false);
   };
 
-  // --- Notes ---
+  // --- Notes (API-backed) ---
   const openNewNote = () => {
     setNoteModal({ id: null });
     setNoteDraft("");
@@ -134,21 +154,66 @@ export default function AppLayout({ children }) {
     setNoteModal({ id: note.id });
     setNoteDraft(note.text);
   };
-  const saveNote = () => {
+  const saveNote = async () => {
     const text = noteDraft.trim();
     if (!text) {
       setNoteModal(null);
       return;
     }
-    if (noteModal?.id) updateNote(noteModal.id, text);
-    else addNote(text);
+    try {
+      if (noteModal?.id) {
+        // Update existing note
+        const res = await fetch(`${API_BASE}/api/notes/${noteModal.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ text }),
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setApiNotes((prev) =>
+            prev.map((n) => (n.id === noteModal.id ? updated : n))
+          );
+        }
+      } else {
+        // Create new note
+        const res = await fetch(`${API_BASE}/api/notes`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ text }),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          setApiNotes((prev) => [created, ...prev]);
+        }
+      }
+      showToast("Note saved");
+    } catch {
+      showToast("Failed to save note");
+    }
     setNoteModal(null);
-    showToast("Note saved");
   };
-  const removeNote = () => {
-    if (noteModal?.id) deleteNote(noteModal.id);
+  const removeNote = async () => {
+    if (!noteModal?.id) {
+      setNoteModal(null);
+      return;
+    }
+    try {
+      await fetch(`${API_BASE}/api/notes/${noteModal.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setApiNotes((prev) => prev.filter((n) => n.id !== noteModal.id));
+      showToast("Note deleted");
+    } catch {
+      showToast("Failed to delete note");
+    }
     setNoteModal(null);
-    showToast("Note deleted");
   };
 
   // --- Appearance ---
@@ -238,13 +303,13 @@ export default function AppLayout({ children }) {
           </button>
 
           <div className="sidebar-nav">
-            {notes.length > 0 && (
+            {apiNotes.length > 0 && (
               <>
                 <div className="sidebar-section-label">
                   <FileTextIcon width={12} height={12} />
                   Notes
                 </div>
-                {notes.map((note) => (
+                {apiNotes.map((note) => (
                   <button
                     key={note.id}
                     className="sidebar-list-item"
@@ -253,7 +318,9 @@ export default function AppLayout({ children }) {
                     <span className="sidebar-list-title">
                       {note.text.split("\n")[0].slice(0, 42) || "Untitled note"}
                     </span>
-                    <span className="sidebar-list-time">{formatAgo(note.timestamp)}</span>
+                    <span className="sidebar-list-time">
+                      {formatAgo(new Date(note.updated_at).getTime())}
+                    </span>
                   </button>
                 ))}
                 <div className="sidebar-section-divider" />
@@ -382,18 +449,6 @@ export default function AppLayout({ children }) {
                       </div>
                     </>
                   )}
-
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      closeProfile();
-                      showToast("Language: coming soon");
-                    }}
-                  >
-                    <LanguageIcon width={16} height={16} />
-                    <span className="menu-item-grow">Language</span>
-                    <span className="menu-item-value">Default</span>
-                  </button>
 
                   <div className="menu-divider" />
                   <button

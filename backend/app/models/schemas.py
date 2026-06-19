@@ -57,7 +57,7 @@ class HistoryTurn(BaseModel):
 class ResearchRequest(BaseModel):
     """Incoming research query from the frontend."""
     query: str = Field(..., min_length=1, max_length=2000, description="The research question")
-    max_iterations: int = Field(default=1, ge=1, le=5, description="Max reflection loops")
+    max_iterations: int = Field(default=2, ge=1, le=5, description="Max reflection loops")
     session_id: Optional[str] = Field(default=None, description="Existing session ID for follow-ups")
     history: list[HistoryTurn] = Field(
         default_factory=list,
@@ -196,3 +196,23 @@ class SessionThreadResponse(BaseModel):
     title: str          # first query in the session
     created_at: str     # ISO timestamp of the first turn
     turns: list[SessionTurn] = Field(default_factory=list)
+
+
+# --- Notes Schemas ---
+
+class NoteCreate(BaseModel):
+    """Create a new note."""
+    text: str = Field(..., min_length=1, max_length=10000)
+
+
+class NoteUpdate(BaseModel):
+    """Update an existing note."""
+    text: str = Field(..., min_length=1, max_length=10000)
+
+
+class NoteResponse(BaseModel):
+    """A note returned from the API."""
+    id: str
+    text: str
+    created_at: str
+    updated_at: str
