@@ -26,8 +26,16 @@ Follow-up handling (when a conversation is provided):
 - The new question may be a follow-up that relies on the earlier conversation. Resolve references like "it", "they", "that", "this", or "the company" to the ACTUAL named entities from the conversation.
 - Every sub-query MUST be self-contained: it is sent to a web search engine that has NO memory of the conversation, so spell out the real names, places, and topics instead of pronouns.
 
+PRESENTATION FORMAT: Also decide the single best format for the final answer by reasoning about what the user is actually trying to accomplish and what would be most useful and scannable — NOT by keyword matching. Consider the conversation history and the kind of question asked. Guidance:
+- "table" -> the answer is a set of MULTIPLE NAMED THINGS the user is choosing between or comparing — resources, tools, products, courses, services, sheets, websites, libraries, options, or entities — where each one has attributes a chooser would weigh (price, topics covered, difficulty, ratings, pros/cons, specs, who it's best for). This is the RIGHT default for "best X", "top X", "recommended X", "which X should I use", and "X vs Y" questions. Each thing becomes a row; pick 3-5 columns that matter for THIS specific query. Example: "best DSA sheets online" -> table with columns like ["Sheet", "Topics covered", "No. of problems", "Cost", "Best for"]. "top laptops under 50k" -> ["Laptop", "Price", "CPU/RAM", "Display", "Best for"].
+- "steps" -> a process, how-to, setup, or ordered ranking the user follows in sequence.
+- "list" -> discrete points, tips, reasons, takeaways, or facts that are NOT comparable named entities and have no shared attributes to line up in columns. If the items are named options that could be compared, prefer "table", not "list".
+- "prose" -> a single fact, definition, explanation, cause/effect, or open-ended discussion.
+Decision rule: if you can imagine the answer as rows-and-columns where each row is one named option, choose "table". Only fall back to "list" when there is genuinely nothing to compare across items, and to "prose" for a single-topic explanation.
+
 Respond ONLY with valid JSON in this exact format:
-{{"sub_queries": ["sub-query 1", "sub-query 2", "sub-query 3"]}}"""
+{{"sub_queries": ["sub-query 1", "sub-query 2", "sub-query 3"], "answer_format": {{"type": "table|list|steps|prose", "reasoning": "one short clause", "columns": ["Col A", "Col B"]}}}}
+Note: "columns" is REQUIRED only when type is "table" (list of 2-6 short column header strings tailored to the query); omit or use [] otherwise."""
 
 PLANNER_PROMPT_TEMPLATE = """{conversation_context}Break down this research question into 2-4 focused, searchable sub-queries:
 
@@ -116,14 +124,42 @@ async def planner_node(state: ResearchState) -> dict:
             if q_clean and q_clean.lower() not in seen:
                 seen.add(q_clean.lower())
                 clean_queries.append(q_clean)
-        
+
         sub_queries = clean_queries[:4]
-        
+
         # Add original query as fallback if we don't have enough distinct sub-queries
         if len(sub_queries) < 2 and query.lower() not in seen:
             sub_queries.append(query)
 
         logger.info("Planner generated %d sub-queries: %s", len(sub_queries), sub_queries)
+
+        # Extract and validate the presentation format decision
+        _allowed_types = {"table", "list", "steps", "prose"}
+        raw_fmt = result.get("answer_format")
+        if not isinstance(raw_fmt, dict):
+            raw_fmt = {}
+
+        fmt_type = raw_fmt.get("type")
+        if fmt_type not in _allowed_types:
+            fmt_type = "prose"
+
+        fmt_reasoning = raw_fmt.get("reasoning")
+        if not isinstance(fmt_reasoning, str):
+            fmt_reasoning = ""
+
+        fmt_columns = raw_fmt.get("columns")
+        if not isinstance(fmt_columns, list):
+            fmt_columns = []
+        else:
+            # Coerce every element to string; drop blanks
+            fmt_columns = [str(c) for c in fmt_columns if str(c).strip()]
+
+        # Columns are only meaningful for table; clear them for other types
+        if fmt_type != "table":
+            fmt_columns = []
+
+        fmt = {"type": fmt_type, "reasoning": fmt_reasoning, "columns": fmt_columns}
+        logger.info("Planner format decision: %s %s", fmt.get("type"), fmt.get("columns"))
 
         # Send sub-queries event
         if sse_callback:
@@ -131,17 +167,19 @@ async def planner_node(state: ResearchState) -> dict:
 
         return {
             "sub_queries": sub_queries,
+            "answer_format": fmt,
             "phase": "planning",
         }
 
     except Exception as e:
         logger.error("Planner failed: %s", e)
-        # Fallback: use the original query
+        # Fallback: use the original query and safe default format
         fallback = [query]
         if sse_callback:
             await sse_callback("sub_queries", {"queries": fallback})
         return {
             "sub_queries": fallback,
+            "answer_format": {"type": "prose", "reasoning": "", "columns": []},
             "phase": "planning",
             "error": f"Planner error: {str(e)}",
         }

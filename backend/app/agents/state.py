@@ -86,6 +86,7 @@ class ResearchState(TypedDict, total=False):
 
     # --- Planner Output ---
     sub_queries: list[str]                              # Decomposed sub-questions
+    answer_format: dict                                 # Reasoned presentation format {type, reasoning, columns?}
 
     # --- Researcher Output (accumulated across parallel nodes) ---
     search_results: Annotated[list[dict], _merge_lists] # All search results (deduplicated)
