@@ -116,7 +116,7 @@ function ResearchContent() {
     <main className="research-page">
       <div className="research-thread">
         {hasThread && (
-          <SessionHeader title={headerTitle} onRename={setSessionTitle} />
+          <SessionHeader title={headerTitle} onRename={setSessionTitle} turns={turns} />
         )}
 
         {turns.map((turn) => (
