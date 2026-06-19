@@ -20,6 +20,8 @@ from app.models.schemas import (
     ResearchRequest,
     SessionResponse,
     SessionListItem,
+    SessionTurn,
+    SessionThreadResponse,
     SearchResult,
     RegisterRequest,
     LoginRequest,
@@ -462,33 +464,96 @@ async def research(
 
 
 # --- Session Endpoints ---
+
+def _safe_search_result(raw: dict) -> SearchResult | None:
+    """
+    Construct a SearchResult from a stored dict, tolerating missing keys.
+
+    Older rows may have been saved before the schema was finalised and may be
+    missing one or more fields. Rather than crashing with a 500 we normalise
+    them here so the frontend always receives a well-formed object.
+
+    Returns None when the input is not a dict (silently skipped by callers).
+    """
+    if not isinstance(raw, dict):
+        return None
+    return SearchResult(
+        url=raw.get("url", ""),
+        title=raw.get("title", ""),
+        domain=raw.get("domain", raw.get("url", "")),
+        favicon=raw.get("favicon", ""),
+        snippet=raw.get("snippet", ""),
+    )
+
+
 @app.get("/api/sessions")
 async def list_sessions(
     limit: int = 20,
     user: dict = Depends(get_current_user),
 ):
-    """List recent research sessions for the authenticated user."""
+    """
+    List recent research *threads* for the authenticated user.
+
+    Fetches the most recent ~200 ResearchQuery rows for the user, groups them
+    by session_id in Python, and returns one collapsed item per session sorted
+    by the latest turn's created_at (most-recently-active first).
+
+    Each item carries:
+      - id / query / title  – the session UUID and the first query (title)
+      - turn_count          – number of turns in the session
+      - confidence          – confidence score of the most recent turn
+      - created_at          – ISO timestamp of the first (earliest) turn
+      - updated_at          – ISO timestamp of the most recent turn
+    """
     user_id = user.get("sub", "")
     try:
         factory = get_session_factory()
         async with factory() as db:
+            # Fetch a generous batch so grouping works even for prolific users.
             result = await db.execute(
                 select(ResearchQuery)
                 .where(ResearchQuery.user_id == user_id)
                 .order_by(desc(ResearchQuery.created_at))
-                .limit(limit)
+                .limit(200)
             )
-            queries = result.scalars().all()
+            rows = result.scalars().all()
 
-            return [
+        # Group by session_id, maintaining insertion order so we can later sort
+        # by updated_at without losing any sessions.
+        sessions: dict[str, list] = {}
+        for row in rows:
+            sessions.setdefault(row.session_id, []).append(row)
+
+        # Build one SessionListItem per session.
+        items = []
+        for sid, turns in sessions.items():
+            # Turns from the DB are newest-first; reverse for chronological order.
+            turns_asc = sorted(turns, key=lambda r: r.created_at or "")
+            first = turns_asc[0]
+            last  = turns_asc[-1]
+
+            title        = first.query or ""
+            created_at   = first.created_at.isoformat() if first.created_at else ""
+            updated_at   = last.created_at.isoformat()  if last.created_at  else created_at
+            confidence   = last.confidence or 0.0
+            turn_count   = len(turns_asc)
+
+            items.append(
                 SessionListItem(
-                    id=q.session_id,
-                    query=q.query,
-                    confidence=q.confidence or 0.0,
-                    created_at=q.created_at.isoformat() if q.created_at else "",
+                    id=sid,
+                    query=title,   # back-compat field
+                    title=title,
+                    confidence=confidence,
+                    turn_count=turn_count,
+                    created_at=created_at,
+                    updated_at=updated_at,
                 ).model_dump()
-                for q in queries
-            ]
+            )
+
+        # Sort sessions by most-recently-active first, then cap to `limit`.
+        items.sort(key=lambda x: x["updated_at"], reverse=True)
+        return items[:limit]
+
     except Exception as e:
         logger.error("Failed to list sessions: %s", e)
         return []
@@ -499,7 +564,15 @@ async def get_session(
     session_id: str,
     user: dict = Depends(get_current_user),
 ):
-    """Retrieve a past research session (only if owned by user)."""
+    """
+    Return the full multi-turn thread for *session_id*.
+
+    All ResearchQuery rows that belong to this session (and this user) are
+    fetched in chronological order. Each row becomes a SessionTurn. The
+    response also includes the session-level title (first query) and timestamps.
+
+    Returns 404 when the session doesn't exist or belongs to another user.
+    """
     user_id = user.get("sub", "")
     try:
         factory = get_session_factory()
@@ -510,25 +583,41 @@ async def get_session(
                     ResearchQuery.session_id == session_id,
                     ResearchQuery.user_id == user_id,
                 )
-                .order_by(desc(ResearchQuery.created_at))
-                .limit(1)
+                .order_by(ResearchQuery.created_at)   # ASC — chronological
             )
-            query = result.scalar_one_or_none()
+            rows = result.scalars().all()
 
-            if not query:
-                raise HTTPException(status_code=404, detail="Session not found")
+        if not rows:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-            return SessionResponse(
-                id=query.session_id,
-                query=query.query,
-                answer=query.answer,
-                sources=[SearchResult(**s) for s in (query.sources or [])],
-                citations=query.citations or [],
-                confidence=query.confidence or 0.0,
-                iterations=query.iterations or 1,
-                follow_up_suggestions=query.follow_up_suggestions or [],
-                created_at=query.created_at.isoformat() if query.created_at else "",
-            ).model_dump()
+        turns = []
+        for row in rows:
+            # Defensively normalise stored sources; skip non-dict entries.
+            sources = [
+                sr for raw in (row.sources or [])
+                if (sr := _safe_search_result(raw)) is not None
+            ]
+            turns.append(
+                SessionTurn(
+                    query=row.query or "",
+                    answer=row.answer or "",
+                    sources=sources,
+                    citations=row.citations or [],
+                    confidence=row.confidence or 0.0,
+                    iterations=row.iterations or 1,
+                    follow_up_suggestions=row.follow_up_suggestions or [],
+                    created_at=row.created_at.isoformat() if row.created_at else "",
+                )
+            )
+
+        first = rows[0]
+        return SessionThreadResponse(
+            id=session_id,
+            title=first.query or "",
+            created_at=first.created_at.isoformat() if first.created_at else "",
+            turns=turns,
+        ).model_dump()
+
     except HTTPException:
         raise
     except Exception as e:

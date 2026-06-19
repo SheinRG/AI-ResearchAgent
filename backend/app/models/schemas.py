@@ -151,7 +151,7 @@ class DoneEvent(BaseModel):
 
 
 class SessionResponse(BaseModel):
-    """Response for session retrieval."""
+    """Response for session retrieval (legacy single-turn shape, kept for back-compat)."""
     id: str
     query: str
     answer: Optional[str] = None
@@ -164,8 +164,35 @@ class SessionResponse(BaseModel):
 
 
 class SessionListItem(BaseModel):
-    """Compact session info for list view."""
+    """Compact session info for list view (one entry per session/thread)."""
     id: str
-    query: str
+    query: str          # title = first query in the session (kept for back-compat)
+    title: str          # same as query; explicit field for the new contract
     confidence: float = 0.0
+    turn_count: int = 1
+    created_at: str     # ISO timestamp of the first turn
+    updated_at: str     # ISO timestamp of the most recent turn
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn thread response shapes
+# ---------------------------------------------------------------------------
+
+class SessionTurn(BaseModel):
+    """A single turn (question + answer) within a stored research thread."""
+    query: str
+    answer: str = ""
+    sources: list[SearchResult] = Field(default_factory=list)
+    citations: list = Field(default_factory=list)   # raw; may be dict or Citation
+    confidence: float = 0.0
+    iterations: int = 1
+    follow_up_suggestions: list[str] = Field(default_factory=list)
     created_at: str
+
+
+class SessionThreadResponse(BaseModel):
+    """Full thread: session metadata plus all ordered turns."""
+    id: str
+    title: str          # first query in the session
+    created_at: str     # ISO timestamp of the first turn
+    turns: list[SessionTurn] = Field(default_factory=list)

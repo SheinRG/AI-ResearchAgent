@@ -5,15 +5,22 @@ import { persist } from "zustand/middleware";
 
 /**
  * Zustand store for research session state.
- * Persists recent searches to localStorage.
+ *
+ * Persisted (localStorage): recentSearches, notes.
+ * Transient (in-memory only): sessionsNonce — incremented whenever a research
+ * turn completes so AppLayout knows to re-fetch the sessions list from the DB.
  */
 const useResearchStore = create(
   persist(
     (set, get) => ({
-      // Recent searches (persisted)
+      // -----------------------------------------------------------------------
+      // Persisted state
+      // -----------------------------------------------------------------------
+
+      /** Recent searches (local fallback; sidebar now prefers the DB list). */
       recentSearches: [],
 
-      // Quick notes (persisted) — jotted thoughts shown in the sidebar
+      /** Quick notes — jotted thoughts shown in the sidebar. */
       notes: [],
 
       addNote: (text) => {
@@ -36,14 +43,12 @@ const useResearchStore = create(
         set({ notes: get().notes.filter((n) => n.id !== id) });
       },
 
-      // Add a search to recent history
+      /** Add a search to local recent-history (deduped, max 10). */
       addRecentSearch: (query) => {
         const { recentSearches } = get();
-        // Remove duplicate if exists
         const filtered = recentSearches.filter(
           (s) => s.query.toLowerCase() !== query.toLowerCase()
         );
-        // Add to front, limit to 10
         const updated = [
           { query, timestamp: Date.now() },
           ...filtered,
@@ -51,13 +56,29 @@ const useResearchStore = create(
         set({ recentSearches: updated });
       },
 
-      // Clear recent searches
+      /** Wipe the local recent-search list. */
       clearRecentSearches: () => {
         set({ recentSearches: [] });
       },
+
+      // -----------------------------------------------------------------------
+      // Transient state (NOT persisted — see partialize below)
+      // -----------------------------------------------------------------------
+
+      /**
+       * Monotonically-incrementing counter.  AppLayout watches this value; when
+       * it changes the sidebar re-fetches GET /api/sessions so a freshly-saved
+       * thread appears without a full page reload.
+       */
+      sessionsNonce: 0,
+
+      /** Call this after every completed research turn to refresh the sidebar. */
+      bumpSessions: () => set({ sessionsNonce: get().sessionsNonce + 1 }),
     }),
     {
       name: "research-store",
+      // sessionsNonce is intentionally excluded so it resets to 0 on every
+      // page load and always triggers an initial fetch in AppLayout.
       partialize: (state) => ({
         recentSearches: state.recentSearches,
         notes: state.notes,

@@ -2,12 +2,13 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useAccent } from "@/components/AccentProvider";
 import useResearchStore from "@/stores/researchStore";
 import useToast from "@/stores/toastStore";
+
 import {
   LogoMark,
   PlusIcon,
@@ -27,6 +28,8 @@ import {
   CheckIcon,
 } from "@/components/Icons";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 function formatAgo(timestamp) {
   const minutes = Math.floor((Date.now() - timestamp) / 60000);
   if (minutes < 1) return "just now";
@@ -44,8 +47,8 @@ const ACCENT_LABELS = { blue: "Blue", terracotta: "Terracotta", green: "Green" }
 export default function AppLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuth();
-  const { recentSearches, notes, addNote, updateNote, deleteNote } =
+  const { user, isAuthenticated, token, logout } = useAuth();
+  const { notes, addNote, updateNote, deleteNote, sessionsNonce } =
     useResearchStore();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { accent, setAccent } = useAccent();
@@ -57,6 +60,9 @@ export default function AppLayout({ children }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
 
+  // DB-backed session history for the sidebar.
+  const [dbSessions, setDbSessions] = useState([]);
+
   // Note modal: { id } where id=null means a new note.
   const [noteModal, setNoteModal] = useState(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -65,6 +71,32 @@ export default function AppLayout({ children }) {
     setMounted(true);
     setIsCollapsed(localStorage.getItem("sidebar_collapsed") === "true");
   }, []);
+
+  /**
+   * Fetch the thread list from GET /api/sessions whenever:
+   *   - the user logs in (token changes)
+   *   - a research turn finishes (sessionsNonce bumps)
+   *   - the user navigates back to "/" (pathname changes to "/")
+   *
+   * Failures are silently swallowed so the sidebar degrades gracefully.
+   */
+  const fetchSessions = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions?limit=20`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setDbSessions(Array.isArray(data) ? data : []);
+    } catch {
+      // Network error — keep the last-known list visible.
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions, sessionsNonce, pathname]);
 
   const toggleCollapse = () =>
     setIsCollapsed((v) => {
@@ -81,8 +113,9 @@ export default function AppLayout({ children }) {
     setIsMobileOpen(false);
   };
 
-  const openSearch = (query) => {
-    router.push(`/research?q=${encodeURIComponent(query)}`);
+  /** Navigate to a stored session thread (loads stored results, no re-run). */
+  const openSession = (sessionId) => {
+    router.push(`/research?session=${encodeURIComponent(sessionId)}`);
     setIsMobileOpen(false);
   };
 
@@ -231,20 +264,23 @@ export default function AppLayout({ children }) {
               <ClockIcon width={12} height={12} />
               History
             </div>
-            {recentSearches.length === 0 ? (
+            {dbSessions.length === 0 ? (
               <div className="sidebar-empty">
                 No history yet. Ask something to get started.
               </div>
             ) : (
-              recentSearches.map((search) => (
+              dbSessions.map((session) => (
                 <button
-                  key={search.timestamp}
+                  key={session.id}
                   className="sidebar-list-item"
-                  onClick={() => openSearch(search.query)}
+                  onClick={() => openSession(session.id)}
                 >
-                  <span className="sidebar-list-title">{search.query}</span>
+                  <span className="sidebar-list-title">{session.title || session.query}</span>
                   <span className="sidebar-list-time">
-                    {formatAgo(search.timestamp)}
+                    {/* updated_at is an ISO string; convert to ms for formatAgo */}
+                    {session.updated_at
+                      ? formatAgo(new Date(session.updated_at).getTime())
+                      : formatAgo(new Date(session.created_at).getTime())}
                   </span>
                 </button>
               ))
