@@ -33,5 +33,13 @@ redis[hiredis]==5.2.1
 PyJWT==2.10.1
 bcrypt==4.2.1
 
+# --- File Processing ---
+pypdf==4.3.1
+python-docx==1.1.2
+
 # --- Utilities ---
 python-dotenv==1.0.1
+
+# --- Testing ---
+pytest==8.3.4
+pytest-asyncio==0.24.0

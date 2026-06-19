@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "motion/react";
 import useToast from "@/stores/toastStore";
+import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowUpIcon,
   PlusIcon,
@@ -18,13 +19,15 @@ const PLACEHOLDERS = [
   "Why is the AI chip supply chain so concentrated?",
 ];
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 /**
  * The product's composer. `mode="large"` is the two-row home box (with example
  * chips rendered by the page); `mode="compact"` is the single-row sticky
  * follow-up bar. When `withTools` is set it shows the attach + dictate
- * affordances from the design. Attachments are local/visual (the agent doesn't
- * ingest files), matching the prototype, with a toast for feedback. Dictation
- * uses the Web Speech API when available.
+ * affordances from the design. File attachments are uploaded at submit time:
+ * text is extracted server-side and appended to the query as context.
+ * Dictation uses the Web Speech API when available.
  */
 export default function SearchBar({
   onSearch,
@@ -38,13 +41,16 @@ export default function SearchBar({
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [attachments, setAttachments] = useState([]);
   const [listening, setListening] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const fileRef = useRef(null);
   const recRef = useRef(null);
   const stopTimerRef = useRef(null);
   const showToast = useToast((s) => s.show);
+  const { token } = useAuth();
 
   const isLarge = mode === "large";
+  const isDisabled = disabled || uploading;
 
   // Rotate placeholder text — only when no fixed placeholder is supplied.
   useEffect(() => {
@@ -67,15 +73,60 @@ export default function SearchBar({
     };
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmed = query.trim();
-    if (trimmed && !disabled) {
+    if (!trimmed || isDisabled) return;
+
+    if (attachments.length === 0) {
       onSearch(trimmed);
       if (clearOnSubmit) {
         setQuery("");
         setAttachments([]);
       }
+      return;
+    }
+
+    // Upload all attachments and collect extracted text
+    setUploading(true);
+    let enrichedQuery = trimmed;
+
+    try {
+      for (const attachment of attachments) {
+        try {
+          const formData = new FormData();
+          formData.append("file", attachment.file);
+
+          const res = await fetch(`${API_BASE}/api/upload`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showToast(`Failed to upload ${attachment.name}: ${err.detail || res.statusText}`);
+            continue;
+          }
+
+          const data = await res.json();
+          enrichedQuery +=
+            `\n\n[Context from ${attachment.name}]\n` +
+            data.text.slice(0, 2000);
+        } catch {
+          showToast(`Could not upload ${attachment.name} — skipping`);
+        }
+      }
+    } finally {
+      setUploading(false);
+    }
+
+    onSearch(enrichedQuery);
+    if (clearOnSubmit) {
+      setQuery("");
+      setAttachments([]);
     }
   };
 
@@ -86,9 +137,11 @@ export default function SearchBar({
   };
 
   const handleFiles = (e) => {
+    // Store actual File objects alongside display metadata
     const files = [...(e.target.files || [])].map((f) => ({
       id: `f${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
       name: f.name,
+      file: f,
     }));
     e.target.value = "";
     if (!files.length) return;
@@ -149,6 +202,7 @@ export default function SearchBar({
         ref={fileRef}
         type="file"
         multiple
+        accept=".txt,.md,.pdf,.docx"
         onChange={handleFiles}
         style={{ display: "none" }}
       />
@@ -158,6 +212,7 @@ export default function SearchBar({
         onClick={() => fileRef.current?.click()}
         title="Add files"
         aria-label="Add files"
+        disabled={isDisabled}
       >
         <PlusIcon width={isLarge ? 19 : 18} height={isLarge ? 19 : 18} />
       </button>
@@ -171,6 +226,7 @@ export default function SearchBar({
       onClick={toggleDictation}
       title={listening ? "Stop dictation" : "Dictate"}
       aria-label={listening ? "Stop dictation" : "Dictate"}
+      disabled={isDisabled}
     >
       <MicIcon width={17} height={17} />
     </button>
@@ -180,10 +236,16 @@ export default function SearchBar({
     <button
       type="submit"
       className="ask-submit"
-      disabled={!query.trim() || disabled}
-      aria-label="Start research"
+      disabled={!query.trim() || isDisabled}
+      aria-label={uploading ? "Uploading files…" : "Start research"}
     >
-      <ArrowUpIcon width={isLarge ? 18 : 17} height={isLarge ? 18 : 17} />
+      {uploading ? (
+        <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em" }}>
+          …
+        </span>
+      ) : (
+        <ArrowUpIcon width={isLarge ? 18 : 17} height={isLarge ? 18 : 17} />
+      )}
     </button>
   );
 
@@ -224,11 +286,15 @@ export default function SearchBar({
               id="search-input"
               type="text"
               className="ask-input"
-              placeholder={placeholder || PLACEHOLDERS[placeholderIdx]}
+              placeholder={
+                uploading
+                  ? "Uploading files…"
+                  : placeholder || PLACEHOLDERS[placeholderIdx]
+              }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={disabled}
+              disabled={isDisabled}
               autoComplete="off"
               aria-label="Research question"
             />
@@ -246,11 +312,15 @@ export default function SearchBar({
             <input
               type="text"
               className="ask-input"
-              placeholder={placeholder || PLACEHOLDERS[placeholderIdx]}
+              placeholder={
+                uploading
+                  ? "Uploading files…"
+                  : placeholder || PLACEHOLDERS[placeholderIdx]
+              }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={disabled}
+              disabled={isDisabled}
               autoComplete="off"
               aria-label="Ask a follow-up"
             />
