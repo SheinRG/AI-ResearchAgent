@@ -83,6 +83,7 @@ class ResearchState(TypedDict, total=False):
     query: str                                          # Original user question
     max_iterations: int                                 # Max reflection loops allowed
     history: list[dict]                                 # Prior {query, answer} turns for follow-up context
+    user_name: str                                      # What the user wants the agent to call them ("" = none)
 
     # --- Planner Output ---
     sub_queries: list[str]                              # Decomposed sub-questions

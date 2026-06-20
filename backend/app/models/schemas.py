@@ -46,6 +46,22 @@ class AuthResponse(BaseModel):
     user: dict
 
 
+class ProfileUpdateRequest(BaseModel):
+    """Update a user's personalization settings."""
+    preferred_name: str = Field(
+        default="",
+        max_length=50,
+        description="What the agent should call the user (blank to clear)",
+    )
+
+    @field_validator("preferred_name")
+    @classmethod
+    def clean_preferred_name(cls, v: str) -> str:
+        """Trim and strip control characters so it's safe to drop into prompts."""
+        v = (v or "").strip()
+        return re.sub(r"[\x00-\x1f\x7f]", "", v)[:50]
+
+
 # --- Research Schemas ---
 
 class HistoryTurn(BaseModel):

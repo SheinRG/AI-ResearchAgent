@@ -29,6 +29,7 @@ class User(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, default="")
+    preferred_name = Column(String, default="")  # What the agent calls the user
     password_hash = Column(String, nullable=True)  # Null for Google-only users
     google_id = Column(String, nullable=True, unique=True, index=True)
     picture = Column(String, default="")
@@ -145,11 +146,18 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Create all database tables."""
+    """Create all database tables and apply lightweight column migrations."""
     engine = get_engine()
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # create_all only creates missing tables, not new columns on existing
+            # ones. Until Alembic is introduced, add new columns idempotently so
+            # already-deployed databases pick them up without a manual migration.
+            from sqlalchemy import text
+            await conn.execute(
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_name VARCHAR DEFAULT ''")
+            )
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error("Failed to initialize database: %s", e)

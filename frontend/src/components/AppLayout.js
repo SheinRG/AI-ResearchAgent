@@ -25,6 +25,8 @@ import {
   MonitorIcon,
   SwatchIcon,
   CheckIcon,
+  TrashIcon,
+  UserIcon,
 } from "@/components/Icons";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -46,7 +48,7 @@ const ACCENT_LABELS = { blue: "Blue", terracotta: "Terracotta", green: "Green" }
 export default function AppLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isAuthenticated, token, logout } = useAuth();
+  const { user, isAuthenticated, token, logout, updateProfile } = useAuth();
   const { sessionsNonce } = useResearchStore();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { accent, setAccent } = useAccent();
@@ -57,6 +59,11 @@ export default function AppLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+
+  // Personalization settings modal.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   // DB-backed session history for the sidebar.
   const [dbSessions, setDbSessions] = useState([]);
@@ -158,6 +165,40 @@ export default function AppLayout({ children }) {
   const openSession = (sessionId) => {
     router.push(`/research?session=${encodeURIComponent(sessionId)}`);
     setIsMobileOpen(false);
+  };
+
+  /** Delete a history thread (with confirmation), then drop it from the list. */
+  const deleteSession = async (sessionId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Delete this thread? This can't be undone.")) return;
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error();
+      setDbSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      showToast("Thread deleted");
+      // If we're viewing the thread we just deleted, return home.
+      if (pathname.startsWith("/research")) router.push("/");
+    } catch {
+      showToast("Failed to delete thread");
+    }
+  };
+
+  /** Open the personalization settings modal, prefilled with the saved name. */
+  const openSettings = () => {
+    setNameDraft(user?.preferred_name || "");
+    setSettingsOpen(true);
+    closeProfile();
+  };
+
+  const saveSettings = async () => {
+    setSavingName(true);
+    const result = await updateProfile(nameDraft.trim());
+    setSavingName(false);
+    showToast(result.success ? "Personalization saved" : "Failed to save");
+    if (result.success) setSettingsOpen(false);
   };
 
   const closeProfile = () => {
@@ -358,19 +399,28 @@ export default function AppLayout({ children }) {
               </div>
             ) : (
               dbSessions.map((session) => (
-                <button
-                  key={session.id}
-                  className="sidebar-list-item"
-                  onClick={() => openSession(session.id)}
-                >
-                  <span className="sidebar-list-title">{session.title || session.query}</span>
-                  <span className="sidebar-list-time">
-                    {/* updated_at is an ISO string; convert to ms for formatAgo */}
-                    {session.updated_at
-                      ? formatAgo(new Date(session.updated_at).getTime())
-                      : formatAgo(new Date(session.created_at).getTime())}
-                  </span>
-                </button>
+                <div key={session.id} className="sidebar-list-row">
+                  <button
+                    className="sidebar-list-item"
+                    onClick={() => openSession(session.id)}
+                  >
+                    <span className="sidebar-list-title">{session.title || session.query}</span>
+                    <span className="sidebar-list-time">
+                      {/* updated_at is an ISO string; convert to ms for formatAgo */}
+                      {session.updated_at
+                        ? formatAgo(new Date(session.updated_at).getTime())
+                        : formatAgo(new Date(session.created_at).getTime())}
+                    </span>
+                  </button>
+                  <button
+                    className="sidebar-item-delete"
+                    onClick={(e) => deleteSession(session.id, e)}
+                    title="Delete thread"
+                    aria-label="Delete thread"
+                  >
+                    <TrashIcon width={14} height={14} />
+                  </button>
+                </div>
               ))
             )}
           </div>
@@ -419,70 +469,90 @@ export default function AppLayout({ children }) {
                   </div>
                   <div className="menu-divider" />
 
-                  <button
-                    className="menu-item"
-                    onClick={() => setAppearanceOpen((v) => !v)}
-                  >
-                    <AppearanceModeIcon width={16} height={16} />
+                  <button className="menu-item" onClick={openSettings}>
+                    <UserIcon width={16} height={16} />
                     <span className="menu-item-grow">
-                      Appearance
-                      <span className="menu-item-sub">{appearanceLabel}</span>
+                      Personalization
+                      <span className="menu-item-sub">
+                        {user?.preferred_name
+                          ? `Called "${user.preferred_name}"`
+                          : "Set what goon calls you"}
+                      </span>
                     </span>
                     <ChevronRightIcon
                       width={14}
                       height={14}
                       className="menu-item-chevron"
-                      style={{
-                        transform: appearanceOpen ? "rotate(90deg)" : "none",
-                      }}
                     />
                   </button>
 
-                  {appearanceOpen && (
-                    <>
-                      {[
-                        { id: "light", label: "Light", Icon: SunIcon },
-                        { id: "dark", label: "Dark", Icon: MoonIcon },
-                        { id: "system", label: "System", Icon: MonitorIcon },
-                      ].map(({ id, label, Icon }) => (
-                        <button
-                          key={id}
-                          className="menu-item"
-                          style={{ paddingLeft: 18 }}
-                          onClick={() => setTheme(id)}
-                        >
-                          <Icon width={15} height={15} />
-                          <span className="menu-item-grow">{label}</span>
-                          {theme === id && (
-                            <CheckIcon
-                              width={15}
-                              height={15}
-                              className="menu-item-check"
-                            />
-                          )}
-                        </button>
-                      ))}
+                  <div className="menu-item-with-flyout">
+                    <button
+                      className="menu-item"
+                      onClick={() => setAppearanceOpen((v) => !v)}
+                    >
+                      <AppearanceModeIcon width={16} height={16} />
+                      <span className="menu-item-grow">
+                        Appearance
+                        <span className="menu-item-sub">{appearanceLabel}</span>
+                      </span>
+                      <ChevronRightIcon
+                        width={14}
+                        height={14}
+                        className="menu-item-chevron"
+                        style={{
+                          transform: appearanceOpen ? "rotate(180deg)" : "none",
+                        }}
+                      />
+                    </button>
 
-                      <div className="accent-row" style={{ paddingLeft: 18 }}>
-                        <SwatchIcon
-                          width={15}
-                          height={15}
-                          style={{ color: "var(--text-secondary)", marginRight: 4 }}
-                        />
-                        {["blue", "terracotta", "green"].map((a) => (
+                    {appearanceOpen && (
+                      <div className="popup-menu appearance-flyout">
+                        {[
+                          { id: "light", label: "Light", Icon: SunIcon },
+                          { id: "dark", label: "Dark", Icon: MoonIcon },
+                          { id: "system", label: "System", Icon: MonitorIcon },
+                        ].map(({ id, label, Icon }) => (
                           <button
-                            key={a}
-                            className={`accent-swatch accent-${a} ${
-                              accent === a ? "is-active" : ""
-                            }`}
-                            onClick={() => setAccent(a)}
-                            title={ACCENT_LABELS[a]}
-                            aria-label={`${ACCENT_LABELS[a]} accent`}
-                          />
+                            key={id}
+                            className="menu-item"
+                            onClick={() => setTheme(id)}
+                          >
+                            <Icon width={15} height={15} />
+                            <span className="menu-item-grow">{label}</span>
+                            {theme === id && (
+                              <CheckIcon
+                                width={15}
+                                height={15}
+                                className="menu-item-check"
+                              />
+                            )}
+                          </button>
                         ))}
+
+                        <div className="menu-divider" />
+
+                        <div className="accent-row">
+                          <SwatchIcon
+                            width={15}
+                            height={15}
+                            style={{ color: "var(--text-secondary)", marginRight: 4 }}
+                          />
+                          {["blue", "terracotta", "green"].map((a) => (
+                            <button
+                              key={a}
+                              className={`accent-swatch accent-${a} ${
+                                accent === a ? "is-active" : ""
+                              }`}
+                              onClick={() => setAccent(a)}
+                              title={ACCENT_LABELS[a]}
+                              aria-label={`${ACCENT_LABELS[a]} accent`}
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </>
-                  )}
+                    )}
+                  </div>
 
                   <div className="menu-divider" />
                   <button
@@ -549,6 +619,61 @@ export default function AppLayout({ children }) {
                 </button>
                 <button className="btn-accent" onClick={saveNote}>
                   Save note
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Personalization settings modal */}
+      {settingsOpen && (
+        <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <span className="modal-title">Personalization</span>
+              <button
+                className="msg-action-btn"
+                onClick={() => setSettingsOpen(false)}
+                aria-label="Close"
+              >
+                <CloseIcon width={18} height={18} />
+              </button>
+            </div>
+            <label className="settings-label" htmlFor="preferred-name-input">
+              What should goon call you?
+            </label>
+            <input
+              id="preferred-name-input"
+              className="modal-input"
+              type="text"
+              maxLength={50}
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !savingName) saveSettings();
+              }}
+              placeholder="e.g. Rashi"
+              autoFocus
+            />
+            <p className="settings-hint">
+              The agent will address you by this name in its answers. Leave blank
+              to turn it off.
+            </p>
+            <div className="modal-foot">
+              <div className="modal-actions">
+                <button
+                  className="btn-ghost"
+                  onClick={() => setSettingsOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-accent"
+                  onClick={saveSettings}
+                  disabled={savingName}
+                >
+                  {savingName ? "Saving…" : "Save"}
                 </button>
               </div>
             </div>

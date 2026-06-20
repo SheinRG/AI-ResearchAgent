@@ -16,6 +16,7 @@ from app.models.schemas import (
     LoginRequest,
     GoogleAuthRequest,
     AuthResponse,
+    ProfileUpdateRequest,
 )
 from app.models.database import User, get_session_factory
 from app.services.auth import (
@@ -133,7 +134,7 @@ async def register(request: RegisterRequest):
         await db.commit()
         token = create_token(user.id, user.email, user.name)
         logger.info("New user registered: %s", user.email)
-        return AuthResponse(token=token, user={"id": user.id, "email": user.email, "name": user.name})
+        return AuthResponse(token=token, user={"id": user.id, "email": user.email, "name": user.name, "preferred_name": user.preferred_name or ""})
 
 
 @router.post("/login")
@@ -148,7 +149,7 @@ async def login(request: LoginRequest):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         token = create_token(user.id, user.email, user.name)
         logger.info("User logged in: %s", user.email)
-        return AuthResponse(token=token, user={"id": user.id, "email": user.email, "name": user.name})
+        return AuthResponse(token=token, user={"id": user.id, "email": user.email, "name": user.name, "preferred_name": user.preferred_name or ""})
 
 
 @router.post("/google")
@@ -184,12 +185,50 @@ async def google_auth(request: GoogleAuthRequest):
             await db.commit()
         token = create_token(user.id, user.email, user.name)
         logger.info("Google auth: %s", user.email)
-        return AuthResponse(token=token, user={"id": user.id, "email": user.email, "name": user.name})
+        return AuthResponse(token=token, user={"id": user.id, "email": user.email, "name": user.name, "preferred_name": user.preferred_name or ""})
 
 
 @router.get("/me")
 async def get_me(user: dict = Depends(get_current_user)):
-    return {"id": user.get("sub"), "email": user.get("email"), "name": user.get("name")}
+    user_id = user.get("sub", "")
+    preferred_name = ""
+    try:
+        factory = get_session_factory()
+        async with factory() as db:
+            db_user = await db.get(User, user_id)
+            if db_user:
+                preferred_name = db_user.preferred_name or ""
+    except Exception as e:
+        logger.warning("Failed to load preferred_name for %s: %s", user_id, e)
+    return {
+        "id": user_id,
+        "email": user.get("email"),
+        "name": user.get("name"),
+        "preferred_name": preferred_name,
+    }
+
+
+@router.patch("/profile")
+async def update_profile(
+    request: ProfileUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Update the current user's personalization settings (preferred name)."""
+    user_id = user.get("sub", "")
+    factory = get_session_factory()
+    async with factory() as db:
+        db_user = await db.get(User, user_id)
+        if db_user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        db_user.preferred_name = request.preferred_name
+        await db.commit()
+        logger.info("Updated preferred_name for %s", db_user.email)
+        return {
+            "id": db_user.id,
+            "email": db_user.email,
+            "name": db_user.name,
+            "preferred_name": db_user.preferred_name or "",
+        }
 
 
 @router.get("/rate-limit")

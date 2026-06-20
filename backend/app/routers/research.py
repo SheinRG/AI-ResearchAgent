@@ -14,7 +14,7 @@ from typing import AsyncGenerator
 
 from app.config import get_settings
 from app.models.schemas import ResearchRequest
-from app.models.database import ResearchSession, ResearchQuery, get_session_factory
+from app.models.database import User, ResearchSession, ResearchQuery, get_session_factory
 from app.agents.graph import get_research_graph
 from app.routers.auth import get_current_user, check_rate_limit
 
@@ -56,6 +56,17 @@ async def research(request: ResearchRequest, user: dict = Depends(get_current_us
     logger.info("Research request from %s: %s", user.get("email"), request.query[:100])
     await check_rate_limit(user_id)
 
+    # Personalization: how the user wants the agent to address them (if set).
+    user_name = ""
+    try:
+        factory = get_session_factory()
+        async with factory() as db:
+            db_user = await db.get(User, user_id)
+            if db_user:
+                user_name = db_user.preferred_name or ""
+    except Exception as e:
+        logger.warning("Could not load preferred_name for %s: %s", user_id, e)
+
     async def event_stream() -> AsyncGenerator[str, None]:
         session_id = request.session_id or str(uuid.uuid4())
         start_time = time.monotonic()
@@ -71,6 +82,7 @@ async def research(request: ResearchRequest, user: dict = Depends(get_current_us
                     "query": request.query,
                     "max_iterations": request.max_iterations,
                     "history": [{"query": h.query, "answer": h.answer} for h in request.history],
+                    "user_name": user_name,
                     "iteration": 0,
                     "sub_queries": [],
                     "search_results": [],

@@ -5,7 +5,7 @@ Sessions router — list sessions, get a single session thread.
 import logging
 
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, delete
 
 from app.models.schemas import (
     SessionListItem,
@@ -13,7 +13,7 @@ from app.models.schemas import (
     SessionThreadResponse,
     SearchResult,
 )
-from app.models.database import ResearchQuery, get_session_factory
+from app.models.database import ResearchQuery, ResearchSession, get_session_factory
 from app.routers.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,44 @@ async def list_sessions(limit: int = 20, user: dict = Depends(get_current_user))
     except Exception as e:
         logger.error("Failed to list sessions: %s", e)
         return []
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, user: dict = Depends(get_current_user)):
+    """Delete a history thread owned by the current user (and all its turns)."""
+    user_id = user.get("sub", "")
+    try:
+        factory = get_session_factory()
+        async with factory() as db:
+            # Ownership check: only the owner's rows for this session may be deleted.
+            owned = await db.execute(
+                select(ResearchQuery.id)
+                .where(ResearchQuery.session_id == session_id)
+                .where(ResearchQuery.user_id == user_id)
+                .limit(1)
+            )
+            if owned.scalar_one_or_none() is None:
+                raise HTTPException(status_code=404, detail="Thread not found")
+
+            # Remove the turns, then the parent session row (if it belongs here).
+            await db.execute(
+                delete(ResearchQuery)
+                .where(ResearchQuery.session_id == session_id)
+                .where(ResearchQuery.user_id == user_id)
+            )
+            await db.execute(
+                delete(ResearchSession)
+                .where(ResearchSession.id == session_id)
+                .where(ResearchSession.user_id == user_id)
+            )
+            await db.commit()
+        logger.info("Deleted session %s for user %s", session_id, user_id)
+        return {"deleted": True, "session_id": session_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to delete session %s: %s", session_id, e)
+        raise HTTPException(status_code=500, detail="Failed to delete thread")
 
 
 @router.get("/sessions/{session_id}")

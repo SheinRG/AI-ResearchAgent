@@ -73,6 +73,13 @@ export const GlobeIcon = (props) => (
   </svg>
 );
 
+export const UserIcon = (props) => (
+  <svg {...base} {...props}>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21a8 8 0 0 1 16 0" />
+  </svg>
+);
+
 export const BookIcon = (props) => (
   <svg {...base} {...props}>
     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 4.5Z" />

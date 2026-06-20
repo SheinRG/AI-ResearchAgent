@@ -147,6 +147,33 @@ export function AuthProvider({ children }) {
     clearAuth();
   }, [clearAuth]);
 
+  // Update personalization (e.g. preferred name) and sync local state + storage.
+  const updateProfile = useCallback(
+    async (preferredName) => {
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/profile`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ preferred_name: preferredName }),
+        });
+        if (!res.ok) throw new Error("Failed to update profile");
+        const updated = await res.json();
+        setUser((prev) => {
+          const merged = { ...(prev || {}), ...updated };
+          localStorage.setItem("auth_user", JSON.stringify(merged));
+          return merged;
+        });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    [token]
+  );
+
   const value = {
     user,
     token,
@@ -156,6 +183,7 @@ export function AuthProvider({ children }) {
     register,
     loginWithGoogle,
     logout,
+    updateProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

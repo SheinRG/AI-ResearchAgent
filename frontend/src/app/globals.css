@@ -2526,3 +2526,91 @@ body::before {
         scroll-behavior: auto;
     }
 }
+
+/* ============================================================
+   HISTORY ITEM DELETE • APPEARANCE FLYOUT • SETTINGS MODAL
+   ============================================================ */
+
+/* Delete button on a history thread (revealed on row hover). */
+.sidebar-list-row {
+    position: relative;
+}
+
+.sidebar-item-delete {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: none;
+    border-radius: 7px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--transition-fast), background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.sidebar-list-row:hover .sidebar-item-delete,
+.sidebar-item-delete:focus-visible {
+    opacity: 1;
+}
+
+.sidebar-item-delete:hover {
+    background: var(--error-bg);
+    color: var(--error);
+}
+
+/* Keep the title clear of the delete button while hovering. */
+.sidebar-list-row:hover .sidebar-list-title {
+    max-width: 178px;
+}
+
+/* Appearance options as a small card beside the menu item, not inline. */
+.menu-item-with-flyout {
+    position: relative;
+}
+
+.appearance-flyout {
+    left: calc(100% + 10px);
+    bottom: -8px;
+    width: 210px;
+}
+
+/* Settings modal input + helper text. */
+.settings-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.modal-input:focus {
+    border-color: var(--accent);
+}
+
+.settings-hint {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    margin: 8px 0 0;
+    line-height: 1.45;
+}
