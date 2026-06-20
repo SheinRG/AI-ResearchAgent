@@ -95,7 +95,8 @@ export default function HomePage() {
 
   if (isLoading || !isAuthenticated) return null;
 
-  const name = user?.name?.split(" ")[0];
+  // Prefer the user's personalized name; fall back to their first name.
+  const name = user?.preferred_name?.trim() || user?.name?.split(" ")[0];
 
   return (
     <main className="home-hero">
