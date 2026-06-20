@@ -57,11 +57,13 @@ function ResearchContent() {
   const loadedSessionRef = useRef(null);
   const liveRef          = useRef(null);
 
+  // Only redirect to login when trying to run a new query without auth.
+  // Shared session links (?session=) are public and work without login.
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !isAuthenticated && !sessionId) {
       router.push("/login");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, sessionId]);
 
   // ---------------------------------------------------------------------------
   // handleComplete — freeze a finished SSE run into the thread
@@ -90,8 +92,8 @@ function ResearchContent() {
   // Effect A — ?session=<id>  →  load stored thread from the DB (no re-run)
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    // Skip if: no sessionId param, already loaded this exact id, auth not ready.
-    if (!sessionId || loadedSessionRef.current === sessionId || !token) return;
+    // Skip if: no sessionId param, already loaded this exact id, or auth still loading.
+    if (!sessionId || loadedSessionRef.current === sessionId || isLoading) return;
 
     loadedSessionRef.current = sessionId;
 
@@ -104,9 +106,9 @@ function ResearchContent() {
     setSessionTitle(null);
     setActiveQuery(null);
 
-    fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    // Public endpoint — send auth header if available, not required.
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`, { headers })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -141,7 +143,7 @@ function ResearchContent() {
       .finally(() => {
         setSessionLoading(false);
       });
-  }, [sessionId, token]);
+  }, [sessionId, token, isLoading]);
 
   // ---------------------------------------------------------------------------
   // Effect B — ?q=<query>  →  start a fresh live research run
@@ -196,7 +198,9 @@ function ResearchContent() {
   const hasThread    = turns.length > 0 || Boolean(activeQuery);
   const headerTitle  = sessionTitle || turns[0]?.query || activeQuery || "Untitled session";
 
-  if (isLoading || !isAuthenticated) return null;
+  // For shared sessions, unauthenticated visitors are allowed to view.
+  if (isLoading && !sessionId) return null;
+  if (!isAuthenticated && !sessionId) return null;
 
   // Show a full-page skeleton while the stored thread is being fetched.
   if (sessionLoading) {
@@ -265,7 +269,7 @@ function ResearchContent() {
           </div>
         )}
 
-        {hasThread && (
+        {hasThread && isAuthenticated && (
           <div className="followup-composer">
             <SearchBar
               onSearch={submitQuery}
@@ -274,6 +278,15 @@ function ResearchContent() {
               disabled={isStreaming || Boolean(activeQuery)}
               clearOnSubmit
             />
+          </div>
+        )}
+
+        {hasThread && !isAuthenticated && (
+          <div className="shared-session-cta">
+            <p>Want to ask follow-up questions or save your own research?</p>
+            <a href="/login" className="btn-accent" style={{ display: "inline-block", padding: "8px 20px", borderRadius: 8, textDecoration: "none", fontSize: 14 }}>
+              Sign in to continue
+            </a>
           </div>
         )}
       </div>

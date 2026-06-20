@@ -78,14 +78,14 @@ async def list_sessions(limit: int = 20, user: dict = Depends(get_current_user))
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: str, user: dict = Depends(get_current_user)):
-    user_id = user.get("sub", "")
+async def get_session(session_id: str):
+    # Public endpoint — the UUID is the only authorization needed for read access.
     try:
         factory = get_session_factory()
         async with factory() as db:
             result = await db.execute(
                 select(ResearchQuery)
-                .where(ResearchQuery.session_id == session_id, ResearchQuery.user_id == user_id)
+                .where(ResearchQuery.session_id == session_id)
                 .order_by(ResearchQuery.created_at)
             )
             rows = result.scalars().all()
