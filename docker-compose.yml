@@ -75,6 +75,9 @@ services:
         # Browser must reach the backend on the host, not the compose network.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        # Optional frontend error tracking; blank = disabled.
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_ENVIRONMENT: ${ENVIRONMENT:-development}
     container_name: research-frontend
     restart: unless-stopped
     ports:

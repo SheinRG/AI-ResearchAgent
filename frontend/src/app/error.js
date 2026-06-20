@@ -3,11 +3,13 @@
 // Route-level error boundary. Next.js renders this when a Server/Client
 // Component in this segment throws — instead of a blank screen or the raw
 // dev overlay. `reset()` re-attempts rendering the segment.
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 export default function Error({ error, reset }) {
   useEffect(() => {
-    // Surface the error for debugging / future error-tracking (e.g. Sentry).
+    // Report to Sentry (no-op when no DSN is configured) and log for local dev.
+    Sentry.captureException(error);
     console.error(error);
   }, [error]);
 
