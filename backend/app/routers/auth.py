@@ -3,6 +3,7 @@ Auth router — register, login, Google OAuth, /me endpoint.
 Also exports get_current_user and check_rate_limit for use by other routers.
 """
 
+import time
 import uuid
 import logging
 
@@ -42,27 +43,76 @@ async def get_current_user(request: Request) -> dict:
     return payload
 
 
+_RATE_WINDOW_SECONDS = 3600
+
+# Process-local fallback counters used only when Redis is unavailable, so a
+# Redis outage bounds abuse per-instance instead of removing the limit entirely
+# (each research query spends real money on Groq + Serper). Maps user_id ->
+# (window_start_epoch, count). Not shared across instances — acceptable as a
+# degraded mode; the single Render instance behaves the same as with Redis.
+_local_buckets: dict[str, tuple[float, int]] = {}
+
+
+def _rate_limit_exceeded(limit: int) -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail=f"Rate limit exceeded. Maximum {limit} queries per hour.",
+    )
+
+
+def _check_local_rate_limit(user_id: str, limit: int) -> None:
+    """Fixed-window limiter in process memory (Redis-down fallback)."""
+    now = time.time()
+
+    # Opportunistically prune expired buckets so memory can't grow unbounded.
+    if len(_local_buckets) > 10_000:
+        for uid, (start, _) in list(_local_buckets.items()):
+            if now - start >= _RATE_WINDOW_SECONDS:
+                _local_buckets.pop(uid, None)
+
+    window_start, count = _local_buckets.get(user_id, (now, 0))
+    if now - window_start >= _RATE_WINDOW_SECONDS:
+        window_start, count = now, 0  # window rolled over
+
+    count += 1
+    _local_buckets[user_id] = (window_start, count)
+    if count > limit:
+        raise _rate_limit_exceeded(limit)
+
+
 async def check_rate_limit(user_id: str) -> None:
+    """
+    Fixed-window per-user rate limit. Atomic in Redis (INCR-then-check, so
+    concurrent requests can't slip past the cap), with a process-local fallback
+    when Redis is unavailable so the limit fails closed instead of wide open.
+    """
+    settings = get_settings()
+    limit = settings.rate_limit_per_hour
+    key = f"ratelimit:{user_id}"
+
     redis = await get_redis()
     if redis is None:
+        _check_local_rate_limit(user_id, limit)
         return
-    settings = get_settings()
-    key = f"ratelimit:{user_id}"
+
     try:
-        count = await redis.get(key)
-        if count and int(count) >= settings.rate_limit_per_hour:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Rate limit exceeded. Maximum {settings.rate_limit_per_hour} queries per hour.",
-            )
+        # INCR first, then check the returned value — this is atomic, unlike a
+        # GET-then-INCR which races under concurrency. Set the TTL only on the
+        # first hit of the window (nx) so abuse can't keep pushing it forward.
         pipe = redis.pipeline()
         pipe.incr(key)
-        pipe.expire(key, 3600)
-        await pipe.execute()
+        pipe.expire(key, _RATE_WINDOW_SECONDS, nx=True)
+        results = await pipe.execute()
+        count = int(results[0])
+        if count > limit:
+            raise _rate_limit_exceeded(limit)
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning("Rate limit check failed: %s", e)
+        # Redis errored mid-flight — degrade to the local limiter rather than
+        # letting the request through uncounted.
+        logger.warning("Rate limit (redis) failed, using local fallback: %s", e)
+        _check_local_rate_limit(user_id, limit)
 
 
 @router.post("/register")

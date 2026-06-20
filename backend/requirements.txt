@@ -41,6 +41,9 @@ python-multipart==0.0.20
 # --- Utilities ---
 python-dotenv==1.0.1
 
+# --- Observability (optional; active only when SENTRY_DSN is set) ---
+sentry-sdk[fastapi]==2.20.0
+
 # --- Testing ---
 pytest==8.3.4
 pytest-asyncio==0.24.0

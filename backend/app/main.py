@@ -24,6 +24,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _init_sentry(settings) -> None:
+    """
+    Enable Sentry error tracking when SENTRY_DSN is set. No-op otherwise, so a
+    deployment without a DSN behaves exactly as before. Sentry auto-instruments
+    FastAPI/Starlette, capturing unhandled exceptions across all routes and the
+    research agent pipeline.
+    """
+    if not settings.sentry_dsn:
+        return
+    try:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.environment,
+            traces_sample_rate=settings.sentry_traces_sample_rate,
+            send_default_pii=False,
+        )
+        logger.info("Sentry error tracking enabled (env=%s)", settings.environment)
+    except Exception as e:
+        logger.warning("Sentry init failed, continuing without it: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting AI Research Agent backend...")
@@ -70,6 +93,7 @@ app = FastAPI(
 )
 
 settings = get_settings()
+_init_sentry(settings)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     # --- Logging ---
     log_level: str = "INFO"
 
+    # --- Observability (optional) ---
+    # Set sentry_dsn to enable error tracking; blank = disabled (no-op).
+    sentry_dsn: str = ""
+    environment: str = "development"        # tags Sentry events, e.g. "production"
+    sentry_traces_sample_rate: float = 0.0  # 0 = capture errors only, no perf tracing
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
