@@ -1,15 +1,18 @@
 """FastAPI application factory."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.config import get_settings
-from app.models.database import init_db, close_db
+from app.models.database import init_db, close_db, get_engine
 from app.services.llm import get_llm_client
-from app.services.cache import close_redis
+from app.services.cache import close_redis, get_redis
 from app.services.scraper import close_scraper
 from app.routers import auth, research, sessions, upload, notes
 
@@ -82,12 +85,52 @@ app.include_router(upload.router)
 app.include_router(notes.router)
 
 
+async def _check_db() -> bool:
+    """Run a trivial query to confirm Postgres is reachable."""
+    try:
+        engine = get_engine()
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return True
+    except Exception as e:
+        logger.warning("Health check: database unreachable: %s", e)
+        return False
+
+
+async def _check_redis() -> bool:
+    """Ping Redis. A missing/unavailable Redis is degraded, not fatal."""
+    try:
+        client = await get_redis()
+        if client is None:
+            return False
+        await client.ping()
+        return True
+    except Exception as e:
+        logger.warning("Health check: redis unreachable: %s", e)
+        return False
+
+
 @app.get("/api/health")
 async def health_check():
+    """
+    Liveness/readiness probe. Checks the LLM, Postgres, and Redis concurrently.
+
+    Postgres is critical (auth + sessions depend on it), so the endpoint returns
+    503 when the DB is down — telling the platform's health check the instance is
+    not ready. The LLM and Redis are reported but treated as degraded-not-fatal.
+    """
     llm = get_llm_client()
-    llm_ok = await llm.health_check()
-    return {
-        "status": "healthy",
+    llm_ok, db_ok, redis_ok = await asyncio.gather(
+        llm.health_check(),
+        _check_db(),
+        _check_redis(),
+    )
+
+    body = {
+        "status": "healthy" if db_ok else "unhealthy",
         "llm": "connected" if llm_ok else "disconnected",
         "model": llm.model,
+        "database": "connected" if db_ok else "disconnected",
+        "redis": "connected" if redis_ok else "unavailable",
     }
+    return JSONResponse(content=body, status_code=200 if db_ok else 503)
