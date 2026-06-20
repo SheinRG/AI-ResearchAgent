@@ -85,6 +85,9 @@ class ResearchState(TypedDict, total=False):
     history: list[dict]                                 # Prior {query, answer} turns for follow-up context
     user_name: str                                      # What the user wants the agent to call them ("" = none)
 
+    # --- Router Output ---
+    mode: str                                           # "chat" (direct reply) or "research" (full pipeline)
+
     # --- Planner Output ---
     sub_queries: list[str]                              # Decomposed sub-questions
     answer_format: dict                                 # Reasoned presentation format {type, reasoning, columns?}
