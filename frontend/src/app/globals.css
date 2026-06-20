@@ -2011,6 +2011,34 @@ body::before {
     line-height: 1.5;
 }
 
+/* --- Rate limit indicator --- */
+.rate-limit-bar {
+    padding: 0 4px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.rate-limit-track {
+    height: 3px;
+    background: var(--border-subtle);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.rate-limit-fill {
+    height: 100%;
+    background: var(--accent-color);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+}
+
+.rate-limit-label {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.02em;
+}
+
 /* --- Profile footer --- */
 .sidebar-footer {
     margin-top: auto;

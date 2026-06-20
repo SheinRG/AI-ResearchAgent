@@ -140,3 +140,20 @@ async def google_auth(request: GoogleAuthRequest):
 @router.get("/me")
 async def get_me(user: dict = Depends(get_current_user)):
     return {"id": user.get("sub"), "email": user.get("email"), "name": user.get("name")}
+
+
+@router.get("/rate-limit")
+async def get_rate_limit(user: dict = Depends(get_current_user)):
+    """Return the current user's hourly query usage and remaining quota."""
+    user_id = user.get("sub", "")
+    settings = get_settings()
+    limit = settings.rate_limit_per_hour
+    redis = await get_redis()
+    used = 0
+    if redis:
+        try:
+            count = await redis.get(f"ratelimit:{user_id}")
+            used = int(count) if count else 0
+        except Exception:
+            pass
+    return {"used": used, "limit": limit, "remaining": max(0, limit - used)}

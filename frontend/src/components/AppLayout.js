@@ -64,6 +64,9 @@ export default function AppLayout({ children }) {
   // DB-backed notes for the sidebar.
   const [apiNotes, setApiNotes] = useState([]);
 
+  // Hourly query usage.
+  const [rateLimit, setRateLimit] = useState(null); // { used, limit, remaining }
+
   // Note modal: { id } where id=null means a new note.
   const [noteModal, setNoteModal] = useState(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -110,6 +113,19 @@ export default function AppLayout({ children }) {
     }
   }, [token]);
 
+  const fetchRateLimit = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/rate-limit`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      setRateLimit(await res.json());
+    } catch {
+      // silently ignore
+    }
+  }, [token]);
+
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions, sessionsNonce, pathname]);
@@ -117,6 +133,11 @@ export default function AppLayout({ children }) {
   useEffect(() => {
     fetchNotes();
   }, [fetchNotes]);
+
+  // Refresh rate limit on login and after each research turn completes.
+  useEffect(() => {
+    fetchRateLimit();
+  }, [fetchRateLimit, sessionsNonce]);
 
   const toggleCollapse = () =>
     setIsCollapsed((v) => {
@@ -356,6 +377,19 @@ export default function AppLayout({ children }) {
 
           {/* Profile footer */}
           <div className="sidebar-footer">
+            {rateLimit && (
+              <div className="rate-limit-bar">
+                <div className="rate-limit-track">
+                  <div
+                    className="rate-limit-fill"
+                    style={{ width: `${Math.min(100, (rateLimit.used / rateLimit.limit) * 100)}%` }}
+                  />
+                </div>
+                <span className="rate-limit-label">
+                  {rateLimit.remaining} / {rateLimit.limit} queries left this hour
+                </span>
+              </div>
+            )}
             <button
               className="profile-trigger"
               onClick={() => setProfileOpen((v) => !v)}
