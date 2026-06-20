@@ -1,18 +1,57 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 
-export default function CitationTooltip({ source }) {
-  if (!source) return null;
+const GAP = 9; // gap between the badge and the tooltip
 
-  return (
+export default function CitationTooltip({ source, anchorRect }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+
+  // Measure the rendered tooltip and place it relative to the badge.
+  // Rendered through a portal with fixed positioning, so the table's
+  // `overflow-x: auto` (or any scroll container) can't clip it.
+  useLayoutEffect(() => {
+    if (!ref.current || !anchorRect) return;
+    const tip = ref.current.getBoundingClientRect();
+    const margin = 8;
+
+    let left = anchorRect.left + anchorRect.width / 2 - tip.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - tip.width - margin));
+
+    // Prefer above the badge; flip below when there isn't room.
+    const placeBelow = anchorRect.top - tip.height - GAP < margin;
+    const top = placeBelow
+      ? anchorRect.bottom + GAP
+      : anchorRect.top - GAP - tip.height;
+
+    setPos({ left, top });
+  }, [anchorRect]);
+
+  if (!source || !anchorRect || typeof document === "undefined") return null;
+
+  return createPortal(
     <motion.span
+      ref={ref}
       className="citation-tooltip"
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 4 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: pos ? 1 : 0 }}
       transition={{ duration: 0.15 }}
-      style={{ display: "block", textAlign: "left" }}
+      style={{
+        position: "fixed",
+        // Render off-screen until measured so there's no flash at (0,0).
+        left: pos?.left ?? -9999,
+        top: pos?.top ?? -9999,
+        bottom: "auto",
+        right: "auto",
+        margin: 0,
+        transform: "none",
+        display: "block",
+        textAlign: "left",
+        visibility: pos ? "visible" : "hidden",
+      }}
     >
       <span className="citation-tooltip-header" style={{ display: "flex" }}>
         <img
@@ -29,6 +68,7 @@ export default function CitationTooltip({ source }) {
       {source.snippet && (
         <span className="citation-tooltip-snippet" style={{ display: "block" }}>{source.snippet}</span>
       )}
-    </motion.span>
+    </motion.span>,
+    document.body
   );
 }

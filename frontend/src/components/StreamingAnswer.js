@@ -1,18 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CitationTooltip from "./CitationTooltip";
 import { SparklesIcon } from "@/components/Icons";
 
 function CitationBadge({ idx, source }) {
-  const [hovered, setHovered] = useState(false);
+  const ref = useRef(null);
+  // Capture the badge's on-screen rect so the portaled tooltip can anchor to
+  // it. null means "not hovered" (and so no tooltip).
+  const [anchorRect, setAnchorRect] = useState(null);
+
   return (
     <span
+      ref={ref}
       style={{ position: "relative", display: "inline-block" }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => ref.current && setAnchorRect(ref.current.getBoundingClientRect())}
+      onMouseLeave={() => setAnchorRect(null)}
     >
       <a
         href={source?.url || "#"}
@@ -25,7 +30,7 @@ function CitationBadge({ idx, source }) {
       >
         {idx}
       </a>
-      {hovered && source && <CitationTooltip source={source} />}
+      {anchorRect && source && <CitationTooltip source={source} anchorRect={anchorRect} />}
     </span>
   );
 }
