@@ -6,11 +6,13 @@ import json
 import uuid
 import asyncio
 import logging
+import time
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from typing import AsyncGenerator
 
+from app.config import get_settings
 from app.models.schemas import ResearchRequest
 from app.models.database import ResearchSession, ResearchQuery, get_session_factory
 from app.agents.graph import get_research_graph
@@ -56,6 +58,7 @@ async def research(request: ResearchRequest, user: dict = Depends(get_current_us
 
     async def event_stream() -> AsyncGenerator[str, None]:
         session_id = request.session_id or str(uuid.uuid4())
+        start_time = time.monotonic()
         event_queue: asyncio.Queue = asyncio.Queue()
 
         async def queue_callback(event_type: str, data: dict):
@@ -101,11 +104,14 @@ async def research(request: ResearchRequest, user: dict = Depends(get_current_us
                 event_type, data = await asyncio.wait_for(event_queue.get(), timeout=300)
                 if event_type == "_final_state":
                     final = data
+                    settings = get_settings()
                     done_data = {
                         "session_id": session_id,
                         "total_sources": len(final.get("all_sources", final.get("search_results", []))),
                         "iterations": final.get("iteration", 1),
                         "confidence": final.get("confidence", 0.0),
+                        "model": settings.groq_synth_model,
+                        "latency_ms": int((time.monotonic() - start_time) * 1000),
                     }
                     try:
                         await _save_session(

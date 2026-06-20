@@ -182,6 +182,15 @@ export default function ResearchTurn({
             {doneData.iterations || 1}{" "}
             {(doneData.iterations || 1) === 1 ? "iteration" : "iterations"}
           </span>
+          {doneData.model && (
+            <>
+              <span className="done-separator">/</span>
+              <span className="done-model">
+                {doneData.model.replace("llama-", "").replace("-versatile", "").replace("-instant", "")}
+                {doneData.latency_ms && ` · ${(doneData.latency_ms / 1000).toFixed(1)}s`}
+              </span>
+            </>
+          )}
         </div>
       )}
 

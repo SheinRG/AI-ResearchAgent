@@ -1413,6 +1413,12 @@ body::before {
     color: var(--accent);
 }
 
+.done-model {
+    margin-left: auto;
+    opacity: 0.6;
+    font-size: 0.65rem;
+}
+
 .done-separator {
     opacity: 0.5;
 }
