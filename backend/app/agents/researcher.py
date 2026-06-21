@@ -221,8 +221,17 @@ async def researcher_node(state: ResearchState) -> dict:
     use_tavily = bool(settings.use_tavily_search and settings.tavily_api_key)
     if use_tavily:
         all_search_results, scraped_content = await _tavily_search_and_read(sub_queries, settings)
+        provider = "tavily"
+        # Resilience: if Tavily yields no usable content (e.g. credits exhausted,
+        # an outage, or a transient error — all of which surface as empty results),
+        # fall back to the Serper search + scrape path so the query still answers.
+        if not scraped_content:
+            logger.warning("Tavily returned no usable content; falling back to Serper+scrape")
+            all_search_results, scraped_content = await _serper_search_and_scrape(sub_queries, settings)
+            provider = "tavily→serper"
     else:
         all_search_results, scraped_content = await _serper_search_and_scrape(sub_queries, settings)
+        provider = "serper"
 
     # Send sources event to frontend
     if sse_callback and all_search_results:
@@ -232,7 +241,7 @@ async def researcher_node(state: ResearchState) -> dict:
 
     logger.info(
         "Researcher: %d unique sources, %d pages with content (provider=%s)",
-        len(all_search_results), len(scraped_content), "tavily" if use_tavily else "serper",
+        len(all_search_results), len(scraped_content), provider,
     )
 
     # Phase: Reading
