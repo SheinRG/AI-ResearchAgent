@@ -3,7 +3,8 @@
 #
 # In the Render dashboard: New + → "Blueprint" → pick this repo. Render reads
 # this file, creates the services, and prompts for the secrets marked
-# `sync: false` (GROQ_API_KEY, SERPER_API_KEY, GOOGLE_CLIENT_ID, CORS_ORIGINS).
+# `sync: false` (GROQ_API_KEY, SERPER_API_KEY, TAVILY_API_KEY, GOOGLE_CLIENT_ID,
+# CORS_ORIGINS).
 
 services:
   - type: web
@@ -21,7 +22,11 @@ services:
       - key: GROQ_API_KEY
         sync: false                # paste in dashboard
       - key: SERPER_API_KEY
-        sync: false                # paste in dashboard
+        sync: false                # paste in dashboard (powers Images + fallback search)
+      - key: TAVILY_API_KEY
+        sync: false                # paste in dashboard — primary search+read provider
+      - key: USE_TAVILY_SEARCH
+        value: "true"              # set false to fall back to Serper search + scraping
       - key: AUTH_SECRET
         generateValue: true        # Render generates a strong secret
       - key: GOOGLE_CLIENT_ID

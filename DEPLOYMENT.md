@@ -15,7 +15,10 @@ frontend, then come back and set the backend's CORS to the frontend URL.
    `goon-redis` (Redis).
 3. When prompted, fill the secrets:
    - `GROQ_API_KEY` — from https://console.groq.com
-   - `SERPER_API_KEY` — from https://serper.dev
+   - `SERPER_API_KEY` — from https://serper.dev (powers the Images tab + fallback search)
+   - `TAVILY_API_KEY` — from https://app.tavily.com (primary search+read; the
+     speed/quality win depends on this being set. Free tier ≈ 1,000 credits/month,
+     ~4 per query. If unset, the app falls back to Serper search + scraping.)
    - `GOOGLE_CLIENT_ID` — optional (leave blank to hide the Google button)
    - `CORS_ORIGINS` — leave as `[]` for now; you'll set it in step 3.
    - `AUTH_SECRET` is generated automatically. `DATABASE_URL` / `REDIS_URL` are
