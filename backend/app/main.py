@@ -14,6 +14,7 @@ from app.models.database import init_db, close_db, get_engine
 from app.services.llm import get_llm_client
 from app.services.cache import close_redis, get_redis
 from app.services.scraper import close_scraper
+from app.services.tavily import close_tavily
 from app.routers import auth, research, sessions, upload, notes
 
 logging.basicConfig(
@@ -80,6 +81,7 @@ async def lifespan(app: FastAPI):
     yield
 
     await close_scraper()
+    await close_tavily()
     await close_redis()
     await close_db()
     logger.info("Backend shutdown complete")

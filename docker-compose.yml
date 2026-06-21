@@ -48,6 +48,8 @@ services:
       - GROQ_SYNTH_MODEL=${GROQ_SYNTH_MODEL:-llama-3.3-70b-versatile}
       - GROQ_TIMEOUT=60
       - SERPER_API_KEY=${SERPER_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - USE_TAVILY_SEARCH=${USE_TAVILY_SEARCH:-true}
       - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - REDIS_URL=redis://redis:6379/0

@@ -10,6 +10,7 @@ import asyncio
 import logging
 from app.services.search import search_web, search_images
 from app.services.scraper import scrape_urls
+from app.services.tavily import tavily_search
 from app.services.reranker import rerank_chunks
 from app.services.cache import cache_get, cache_get_many, cache_set
 from app.utils.chunker import chunk_text
@@ -58,10 +59,129 @@ async def _search_and_emit_images(query: str, sse_callback) -> list[dict]:
     return images
 
 
+async def _tavily_single_query(sub_query: str, settings) -> list[dict]:
+    """Tavily search+content for one sub-query, using cache when available."""
+    cached = await cache_get("tavily", sub_query)
+    if cached:
+        logger.info("Cache hit for tavily: %s", sub_query[:50])
+        return cached
+
+    results = await tavily_search(
+        sub_query,
+        max_results=settings.search_results_per_query,
+        search_depth=settings.tavily_search_depth,
+    )
+    await cache_set("tavily", sub_query, results)
+    return results
+
+
+async def _tavily_search_and_read(sub_queries: list[str], settings) -> tuple[list[dict], list[dict]]:
+    """Search + read all sub-queries via Tavily (one call each, no separate scrape).
+
+    Returns:
+        (all_search_results, scraped_pages) where each scraped page is
+        {url, text, title, domain}. Content for the top `scrape_top_n` results of
+        each sub-query is fed to the chunker; the rest still appear as sources.
+    """
+    tasks = [_tavily_single_query(sq, settings) for sq in sub_queries]
+    per_query = await asyncio.gather(*tasks, return_exceptions=True)
+
+    all_search_results: list[dict] = []
+    scraped_pages: list[dict] = []
+    seen: set[str] = set()
+
+    for res in per_query:
+        if isinstance(res, Exception):
+            logger.warning("Tavily task failed: %s", res)
+            continue
+        for i, r in enumerate(res):
+            url = r.get("url", "")
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            all_search_results.append({
+                "url": url,
+                "title": r.get("title", ""),
+                "domain": r.get("domain", ""),
+                "favicon": r.get("favicon", ""),
+                "snippet": r.get("snippet", ""),
+            })
+            # Take the cleaned content of the top results per sub-query for
+            # chunking; lower-ranked hits still surface as sources.
+            if i < settings.scrape_top_n and r.get("content"):
+                scraped_pages.append({
+                    "url": url,
+                    "text": r["content"],
+                    "title": r.get("title", ""),
+                    "domain": r.get("domain", ""),
+                })
+
+    return all_search_results, scraped_pages
+
+
+async def _serper_search_and_scrape(sub_queries: list[str], settings) -> tuple[list[dict], list[dict]]:
+    """Search via Serper then scrape the top URLs (the original pipeline).
+
+    Returns:
+        (all_search_results, scraped_pages) — same shape as the Tavily path.
+    """
+    search_tasks = [
+        _search_single_query(sq, settings.search_results_per_query)
+        for sq in sub_queries
+    ]
+    search_results_per_query = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+    all_search_results: list[dict] = []
+    all_urls_to_scrape: list[str] = []
+    url_to_result: dict[str, dict] = {}
+
+    for result in search_results_per_query:
+        if isinstance(result, Exception):
+            logger.warning("Search task failed: %s", result)
+            continue
+        _sub_query, results = result
+        for r in results:
+            if r["url"] not in url_to_result:
+                url_to_result[r["url"]] = r
+                all_search_results.append(r)
+                if len(all_urls_to_scrape) < settings.scrape_top_n * len(sub_queries):
+                    all_urls_to_scrape.append(r["url"])
+
+    # --- Scrape URLs in parallel (cache-first) ---
+    scraped_pages: list[dict] = []
+    cached_map = await cache_get_many("scrape", all_urls_to_scrape)
+    uncached_urls = []
+    for url in all_urls_to_scrape:
+        cached = cached_map.get(url)
+        if cached:
+            scraped_pages.append(cached)
+        else:
+            uncached_urls.append(url)
+
+    if uncached_urls:
+        scraped = await scrape_urls(uncached_urls)
+        for url, text in scraped.items():
+            if text:
+                result_info = url_to_result.get(url, {})
+                content_entry = {
+                    "url": url,
+                    "text": text,
+                    "title": result_info.get("title", ""),
+                    "domain": result_info.get("domain", ""),
+                }
+                scraped_pages.append(content_entry)
+                await cache_set("scrape", url, content_entry)
+
+    return all_search_results, scraped_pages
+
+
 async def researcher_node(state: ResearchState) -> dict:
     """
-    Researcher node: runs the full search → scrape → chunk → rerank pipeline
-    for all sub-queries. Called once with all sub-queries, processes them in parallel.
+    Researcher node: runs the full search → read → chunk pipeline for all
+    sub-queries. Called once with all sub-queries, processes them in parallel.
+
+    Uses Tavily (one search+content call per sub-query) when configured;
+    otherwise falls back to Serper search + Trafilatura scraping.
 
     Args:
         state: Current research state with sub_queries.
@@ -90,35 +210,19 @@ async def researcher_node(state: ResearchState) -> dict:
             "message": f"Searching {len(sub_queries)} sub-questions across the web..."
         })
 
-    # --- Step 1: Search all sub-queries IN PARALLEL ---
     # The image search runs ONCE for the original user query (not per sub-query,
     # to limit API usage) concurrently with web search, and streams its own
-    # `images` SSE event from inside the helper.
-    search_tasks = [
-        _search_single_query(sq, settings.search_results_per_query)
-        for sq in sub_queries
-    ]
+    # `images` SSE event from inside the helper. Images always come from Serper.
     image_task = asyncio.ensure_future(
         _search_and_emit_images(original_query, sse_callback)
     ) if original_query else None
 
-    search_results_per_query = await asyncio.gather(*search_tasks, return_exceptions=True)
-
-    all_search_results = []
-    all_urls_to_scrape = []
-    url_to_result = {}
-
-    for result in search_results_per_query:
-        if isinstance(result, Exception):
-            logger.warning("Search task failed: %s", result)
-            continue
-        _sub_query, results = result
-        for r in results:
-            if r["url"] not in url_to_result:
-                url_to_result[r["url"]] = r
-                all_search_results.append(r)
-                if len(all_urls_to_scrape) < settings.scrape_top_n * len(sub_queries):
-                    all_urls_to_scrape.append(r["url"])
+    # --- Search + read: Tavily (one call) or Serper search + scrape ---
+    use_tavily = bool(settings.use_tavily_search and settings.tavily_api_key)
+    if use_tavily:
+        all_search_results, scraped_content = await _tavily_search_and_read(sub_queries, settings)
+    else:
+        all_search_results, scraped_content = await _serper_search_and_scrape(sub_queries, settings)
 
     # Send sources event to frontend
     if sse_callback and all_search_results:
@@ -126,46 +230,19 @@ async def researcher_node(state: ResearchState) -> dict:
             "sources": all_search_results[:15]  # Send top 15 sources
         })
 
-    logger.info("Researcher: found %d unique sources, scraping %d",
-                len(all_search_results), len(all_urls_to_scrape))
+    logger.info(
+        "Researcher: %d unique sources, %d pages with content (provider=%s)",
+        len(all_search_results), len(scraped_content), "tavily" if use_tavily else "serper",
+    )
 
     # Phase: Reading
     if sse_callback:
         await sse_callback("phase", {
             "phase": "reading",
-            "message": f"Reading and analyzing {len(all_urls_to_scrape)} sources..."
+            "message": f"Reading and analyzing {len(scraped_content)} sources..."
         })
 
-    # --- Step 2: Scrape URLs in parallel ---
-    scraped_content = []
-    urls_to_scrape = all_urls_to_scrape[:settings.scrape_top_n * len(sub_queries)]
-
-    # Check cache for scraped content in a single batched round trip
-    cached_map = await cache_get_many("scrape", urls_to_scrape)
-    uncached_urls = []
-    for url in urls_to_scrape:
-        cached = cached_map.get(url)
-        if cached:
-            scraped_content.append(cached)
-        else:
-            uncached_urls.append(url)
-
-    # Scrape uncached URLs
-    if uncached_urls:
-        scraped = await scrape_urls(uncached_urls)
-        for url, text in scraped.items():
-            if text:
-                result_info = url_to_result.get(url, {})
-                content_entry = {
-                    "url": url,
-                    "text": text,
-                    "title": result_info.get("title", ""),
-                    "domain": result_info.get("domain", ""),
-                }
-                scraped_content.append(content_entry)
-                await cache_set("scrape", url, content_entry)
-
-    # --- Step 3: Chunk all scraped content IN PARALLEL ---
+    # --- Chunk all page content IN PARALLEL ---
     all_chunks = []
     loop = asyncio.get_running_loop()
 

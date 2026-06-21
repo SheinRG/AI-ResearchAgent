@@ -32,6 +32,23 @@ class Settings(BaseSettings):
     # --- Serper (Search API) ---
     serper_api_key: str = ""
 
+    # --- Tavily (search + read API) ---
+    # When use_tavily_search is true AND a key is set, the researcher uses
+    # Tavily's single search+content call instead of Serper search + Trafilatura
+    # scraping. This is faster (one network round-trip per sub-query instead of
+    # search-then-scrape) and far more reliable on JS-heavy sites the scraper
+    # returns empty for. Images still come from Serper. Leave the key blank (or
+    # set use_tavily_search=false) to fall back to the Serper+scrape path.
+    tavily_api_key: str = ""
+    use_tavily_search: bool = True
+    tavily_search_depth: str = "basic"   # "basic" (1 credit, fast) | "advanced" (2 credits, deeper)
+    tavily_timeout: int = 20             # seconds
+    # When False, use Tavily's per-result relevance excerpt (~1k chars, returned
+    # immediately) instead of fetching+extracting full pages. This is much faster
+    # (~1-2s vs ~7s cold) and is plenty of grounding for concise cited answers.
+    # Set True to pull full page text for deeper, long-form synthesis.
+    tavily_include_raw_content: bool = False
+
     # --- Redis ---
     redis_url: str = "redis://redis:6379/0"
     cache_ttl: int = 3600  # 1 hour in seconds
