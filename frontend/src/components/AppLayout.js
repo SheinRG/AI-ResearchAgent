@@ -2,7 +2,8 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useAccent } from "@/components/AccentProvider";
@@ -59,6 +60,10 @@ export default function AppLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  // Anchor for the appearance flyout, which is portaled to <body> so the
+  // sidebar's `overflow: hidden` (needed for the collapse animation) can't
+  // clip it when it opens to the right of the sidebar.
+  const appearanceBtnRef = useRef(null);
 
   // Personalization settings modal.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -495,6 +500,7 @@ export default function AppLayout({ children }) {
 
                   <div className="menu-item-with-flyout">
                     <button
+                      ref={appearanceBtnRef}
                       className="menu-item"
                       onClick={() => setAppearanceOpen((v) => !v)}
                     >
@@ -513,8 +519,19 @@ export default function AppLayout({ children }) {
                       />
                     </button>
 
-                    {appearanceOpen && (
-                      <div className="popup-menu appearance-flyout">
+                    {appearanceOpen && (() => {
+                      const btn = appearanceBtnRef.current;
+                      if (!btn || typeof document === "undefined") return null;
+                      const r = btn.getBoundingClientRect();
+                      return createPortal(
+                      <div
+                        className="popup-menu appearance-flyout"
+                        style={{
+                          position: "fixed",
+                          left: r.right + 10,
+                          bottom: window.innerHeight - r.bottom - 8,
+                        }}
+                      >
                         {[
                           { id: "light", label: "Light", Icon: SunIcon },
                           { id: "dark", label: "Dark", Icon: MoonIcon },
@@ -557,8 +574,10 @@ export default function AppLayout({ children }) {
                             />
                           ))}
                         </div>
-                      </div>
-                    )}
+                      </div>,
+                      document.body
+                      );
+                    })()}
                   </div>
 
                   <div className="menu-divider" />

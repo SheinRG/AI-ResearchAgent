@@ -569,7 +569,9 @@ body::before {
 .session-header {
     position: sticky;
     top: 0;
-    z-index: var(--z-sticky);
+    /* Above the sticky follow-up composer (also z-sticky) so the header's
+       "more" menu isn't painted under the composer when they overlap. */
+    z-index: var(--z-overlay);
     display: flex;
     align-items: center;
     justify-content: space-between;
