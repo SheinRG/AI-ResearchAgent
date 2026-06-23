@@ -12,6 +12,7 @@ import {
   AlertIcon,
   CheckIcon,
   CopyIcon,
+  FileTextIcon,
   RefreshIcon,
   ThumbsUpIcon,
   ThumbsDownIcon,
@@ -85,6 +86,8 @@ export default function ResearchTurn({
   followUps = [],
   onFollowUp = null,
   onRetry = null,
+  documents = [],
+  onOpenDocument = null,
 }) {
   const showToast = useToast((s) => s.show);
   const [editing, setEditing] = useState(false);
@@ -303,6 +306,24 @@ export default function ResearchTurn({
           </>
         )}
       </div>
+
+      {/* Attached file chips — shown when documents were uploaded with this query */}
+      {documents.length > 0 && onOpenDocument && (
+        <div className="chat-question-files">
+          {documents.map((doc, i) => (
+            <button
+              key={`${doc.name}-${i}`}
+              type="button"
+              className="doc-chip"
+              onClick={() => onOpenDocument(doc)}
+              title={`Open ${doc.name}`}
+            >
+              <FileTextIcon width={13} height={13} />
+              <span className="doc-chip-name">{doc.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Answer area — tabs then content. */}
       <div className="chat-answer">

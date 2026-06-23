@@ -113,7 +113,13 @@ export default function SearchBar({
           }
 
           const data = await res.json();
-          documents.push({ name: attachment.name, text: data.text });
+          documents.push({
+            name: attachment.name,
+            text: data.text,
+            file: attachment.file,
+            mime: attachment.file?.type || "",
+            size: attachment.file?.size || 0,
+          });
         } catch {
           showToast(`Could not upload ${attachment.name} — skipping`);
         }

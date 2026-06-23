@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import SearchBar from "@/components/SearchBar";
 import ResearchTurn from "@/components/ResearchTurn";
+import DocumentViewer from "@/components/DocumentViewer";
 import SessionHeader from "@/components/SessionHeader";
 import SkeletonLoader from "@/components/SkeletonLoader";
 import useResearch from "@/hooks/useResearch";
@@ -37,6 +38,8 @@ function ResearchContent() {
   const [turns, setTurns] = useState([]);
   const [activeQuery, setActiveQuery] = useState(null);
   const [sessionTitle, setSessionTitle] = useState(null); // user-renamed title
+  const [activeDocs, setActiveDocs] = useState([]);
+  const [openDoc, setOpenDoc] = useState(null);
 
   // Loading / error state while fetching a stored thread from the DB.
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -84,6 +87,7 @@ function ResearchContent() {
         images:   turn.images,
         followUps: turn.followUps,
         doneData:  turn.doneData,
+        documents: activeDocsRef.current,
       },
     ]);
     setActiveQuery(null);
@@ -168,6 +172,7 @@ function ResearchContent() {
     // consumePendingDocuments clears the store so a refresh doesn't replay them.
     const pendingDocs = consumePendingDocuments();
     activeDocsRef.current = pendingDocs;
+    setActiveDocs(pendingDocs);
     startResearch(urlQuery, 1, token, [], null, handleComplete, pendingDocs);
   }, [urlQuery, sessionId, token, startResearch, addRecentSearch, handleComplete, consumePendingDocuments]);
 
@@ -183,6 +188,7 @@ function ResearchContent() {
       addRecentSearch(trimmed);
       setActiveQuery(trimmed);
       activeDocsRef.current = docs;
+      setActiveDocs(docs);
       // sessionIdRef.current is already set (either from a live run or from the
       // restored thread), so this follow-up correctly continues the same thread.
       startResearch(trimmed, 1, token, history, sessionIdRef.current, handleComplete, docs);
@@ -242,7 +248,7 @@ function ResearchContent() {
   }
 
   return (
-    <main className="research-page">
+    <main className={`research-page ${openDoc ? "viewer-open" : ""}`}>
       <div className="research-thread">
         {hasThread && (
           <SessionHeader title={headerTitle} onRename={setSessionTitle} turns={turns} />
@@ -259,6 +265,8 @@ function ResearchContent() {
             doneData={turn.doneData}
             followUps={turn.followUps}
             onFollowUp={submitQuery}
+            documents={turn.documents || []}
+            onOpenDocument={setOpenDoc}
           />
         ))}
 
@@ -276,6 +284,8 @@ function ResearchContent() {
               showSkeleton={showSkeleton}
               error={error}
               onRetry={retry}
+              documents={activeDocs}
+              onOpenDocument={setOpenDoc}
             />
           </div>
         )}
@@ -301,6 +311,9 @@ function ResearchContent() {
           </div>
         )}
       </div>
+      {openDoc && (
+        <DocumentViewer document={openDoc} onClose={() => setOpenDoc(null)} />
+      )}
     </main>
   );
 }
