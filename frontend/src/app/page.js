@@ -62,9 +62,43 @@ export default function HomePage() {
   const [start, setStart] = useState(0);
   const [chipsOpacity, setChipsOpacity] = useState(1);
 
+  // Playful one-time welcome: right after a fresh sign-in, greet the user as
+  // "bade bhai" for a few seconds, then cross-fade to their real name. While
+  // `welcomeName` is set it overrides the rendered name; `nameOpacity` drives
+  // the fade so the swap itself stays invisible.
+  const [welcomeName, setWelcomeName] = useState(null);
+  const [nameOpacity, setNameOpacity] = useState(1);
+
   useEffect(() => {
     setGreeting(greetingForHour(new Date().getHours()));
     setPool(shuffle(SUGGESTION_POOL));
+  }, []);
+
+  // Consume the one-shot "just logged in" flag (set by useAuth on a real
+  // sign-in) and run the bade-bhai → real-name transition exactly once.
+  useEffect(() => {
+    let fresh = false;
+    try {
+      fresh = sessionStorage.getItem("just_logged_in") === "1";
+      if (fresh) sessionStorage.removeItem("just_logged_in");
+    } catch {
+      // sessionStorage unavailable — skip the welcome, no harm done.
+    }
+    if (!fresh) return;
+
+    setWelcomeName("bade bhai");
+    // Hold "bade bhai" ~3.5s, fade it out (0.4s), then swap in the real name and
+    // fade it back. The 50ms gap after fade-out guarantees the text swap lands
+    // while fully transparent, so the change reads as a clean cross-fade.
+    const fadeOut = setTimeout(() => setNameOpacity(0), 3500);
+    const swap = setTimeout(() => {
+      setWelcomeName(null);
+      setNameOpacity(1);
+    }, 3950);
+    return () => {
+      clearTimeout(fadeOut);
+      clearTimeout(swap);
+    };
   }, []);
 
   useEffect(() => {
@@ -96,7 +130,9 @@ export default function HomePage() {
   if (isLoading || !isAuthenticated) return null;
 
   // Prefer the user's personalized name; fall back to their first name.
-  const name = user?.preferred_name?.trim() || user?.name?.split(" ")[0];
+  const realName = user?.preferred_name?.trim() || user?.name?.split(" ")[0];
+  // During the welcome window, show "bade bhai" in place of the real name.
+  const shownName = welcomeName ?? realName;
 
   return (
     <main className="home-hero">
@@ -104,7 +140,14 @@ export default function HomePage() {
         <div className="home-greeting">
           <h1 className="home-greeting-title">
             {greeting}
-            {name ? <span className="home-greeting-name">, {name}</span> : null}
+            {shownName ? (
+              <span
+                className="home-greeting-name"
+                style={{ opacity: nameOpacity, transition: "opacity 0.4s ease" }}
+              >
+                , {shownName}
+              </span>
+            ) : null}
             <span className="home-greeting-dot">.</span>
           </h1>
           <p className="home-greeting-sub">

@@ -43,6 +43,15 @@ export function AuthProvider({ children }) {
     setUser(newUser);
     localStorage.setItem("auth_token", newToken);
     localStorage.setItem("auth_user", JSON.stringify(newUser));
+    // One-shot flag for a *fresh* login (real login/register/Google sign-in).
+    // The home greeting reads + clears it to play a one-time welcome. The silent
+    // token refresh clears it below, and the on-mount localStorage restore never
+    // calls saveAuth — so only a deliberate sign-in trips it.
+    try {
+      sessionStorage.setItem("just_logged_in", "1");
+    } catch {
+      // sessionStorage unavailable (private mode / SSR) — welcome is non-critical.
+    }
   };
 
   const clearAuth = useCallback(() => {
@@ -169,6 +178,12 @@ export function AuthProvider({ children }) {
       if (!res.ok) return null;
       const data = await res.json();
       saveAuth(data.token, data.user);
+      // A silent refresh is not a fresh login — don't replay the welcome.
+      try {
+        sessionStorage.removeItem("just_logged_in");
+      } catch {
+        // ignore
+      }
       return data.token;
     } catch {
       return null;
