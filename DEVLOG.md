@@ -21,3 +21,4 @@
 - Devlog entry 21
 - Devlog entry 22
 - Devlog entry 23
+- Devlog entry 24
