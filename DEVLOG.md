@@ -3,3 +3,4 @@
 - Record UI direction: Perplexity-style tabs
 - Jot reminder about Docker frontend rebuild step
 - Note file-viewer panel feature shipped
+- List ideas for future search tuning
