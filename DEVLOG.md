@@ -23,3 +23,4 @@
 - Devlog entry 23
 - Devlog entry 24
 - Devlog entry 25
+- Devlog entry 26
