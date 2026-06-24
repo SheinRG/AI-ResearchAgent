@@ -4,3 +4,4 @@
 - Jot reminder about Docker frontend rebuild step
 - Note file-viewer panel feature shipped
 - List ideas for future search tuning
+- Record triage/researcher/synthesizer graph shape
