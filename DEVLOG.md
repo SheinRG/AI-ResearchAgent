@@ -1,1 +1,2 @@
 - Add devlog to track daily notes
+- Note current stack: Groq LLM + Tavily search
