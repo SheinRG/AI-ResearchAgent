@@ -36,3 +36,4 @@
 - Devlog entry 36
 - Devlog entry 37
 - Devlog entry 38
+- Devlog entry 39
